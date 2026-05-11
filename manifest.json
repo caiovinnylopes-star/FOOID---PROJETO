@@ -1,0 +1,23 @@
+{
+  "short_name": "FooID",
+  "name": "FooID Pantry Manager",
+  "description": "A smart pantry management application to track your food items, get expiry notifications, manage shopping lists, and discover recipes.",
+  "icons": [
+    {
+      "src": "https://i.imgur.com/8a0x4Vz.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://i.imgur.com/sTjw3hS.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FFFBEB",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "theme_color": "#FEEBC8"
+}

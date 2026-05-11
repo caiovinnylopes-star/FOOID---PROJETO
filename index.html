@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fooid Pantry Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#FFFBEB">
+    <style>
+      /* Custom animation for the scanner line */
+      @keyframes scan-line-anim {
+        0% {
+          top: 0%;
+        }
+        50% {
+          top: calc(100% - 2px);
+        }
+        100% {
+          top: 0%;
+        }
+      }
+      .animate-scan-line {
+        animation: scan-line-anim 3s ease-in-out infinite;
+      }
+      
+      /* New Pop-up Animation (Slide in from top with bounce) */
+      @keyframes slide-in-top {
+        0% {
+          opacity: 0;
+          transform: translateY(-100%) scale(0.8);
+        }
+        60% {
+          opacity: 1;
+          transform: translateY(10px) scale(1.05);
+        }
+        80% {
+          transform: translateY(-5px) scale(0.98);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      
+      .animate-slide-in-top {
+        animation: slide-in-top 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      /* Custom animation for fading lists */
+      @keyframes fade-in-down {
+        from {
+          opacity: 0;
+          transform: translateY(-1rem);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in-down {
+        animation: fade-in-down 0.5s ease-out forwards;
+      }
+
+      /* Title Entrance Animation */
+      @keyframes pop-in {
+        0% {
+          opacity: 0;
+          transform: scale(0.5);
+        }
+        70% {
+          transform: scale(1.1);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .animate-pop-in {
+        animation: pop-in 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+      }
+      
+      /* Range Slider Customization for Scanner */
+      input[type=range] {
+        -webkit-appearance: none; 
+        background: transparent; 
+      }
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        background: #EF4444;
+        cursor: pointer;
+        margin-top: -8px; 
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      }
+      input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        cursor: pointer;
+        background: rgba(255,255,255,0.5);
+        border-radius: 2px;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+    "@zxing/library": "https://esm.sh/@zxing/library@0.20.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

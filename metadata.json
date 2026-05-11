@@ -1,0 +1,8 @@
+{
+  "name": "FooID",
+  "description": "A smart pantry management application to track your food items, get expiry notifications, manage shopping lists, and discover recipes. Features a built-in barcode and QR code scanner for easy product entry.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
