@@ -12,7 +12,7 @@ import {
     signOut,
     updateProfile,
     GoogleAuthProvider,
-    signInWithPopup,
+    signInWithRedirect,
     User as FirebaseUser,
     sendPasswordResetEmail
 } from 'firebase/auth';
@@ -422,7 +422,8 @@ const App: React.FC = () => {
             if (firebaseUser) {
                 // Get profile from Firestore
                 try {
-                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                    const userDocRef = doc(db, 'users', firebaseUser.uid);
+                    const userDoc = await getDoc(userDocRef);
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
                         setUser({
@@ -430,7 +431,12 @@ const App: React.FC = () => {
                             email: firebaseUser.email || ''
                         });
                     } else {
-                        // Fallback to auth profile if firestore doc doesn't exist yet
+                        // Create profile for new user
+                        await setDoc(userDocRef, {
+                            name: firebaseUser.displayName || 'Usuário',
+                            email: firebaseUser.email || '',
+                            createdAt: serverTimestamp()
+                        });
                         setUser({
                             name: firebaseUser.displayName || 'Usuário',
                             email: firebaseUser.email || ''
@@ -469,24 +475,10 @@ const App: React.FC = () => {
     const handleGoogleSignIn = async () => {
         const provider = new GoogleAuthProvider();
         try {
-            const result = await signInWithPopup(auth, provider);
-            const user = result.user;
-            
-            // Check if user exists in Firestore
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (!userDoc.exists()) {
-                // Create profile for new Google user
-                await setDoc(doc(db, 'users', user.uid), {
-                    name: user.displayName || 'Usuário Google',
-                    email: user.email || '',
-                    createdAt: serverTimestamp()
-                });
-            }
+            await signInWithRedirect(auth, provider);
         } catch (error: any) {
             console.error("Google login error:", error);
-            if (error.code !== 'auth/cancelled-popup-request') {
-                alert("Erro ao entrar com Google. Verifique se os popups estão permitidos.");
-            }
+            alert("Erro ao redirecionar para o Google.");
         }
     };
 
