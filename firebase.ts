@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDummyKeyForBuildToSucceed12345678",
+  apiKey: "AIzaSyCFKQYJI8WuiLXWdiFmMiVB_YTvJm2VUpg",
   authDomain: "gen-lang-client-0666268988.firebaseapp.com",
   projectId: "gen-lang-client-0666268988",
-  storageBucket: "gen-lang-client-0666268988.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef1234567890"
+  storageBucket: "gen-lang-client-0666268988.firebasestorage.app",
+  messagingSenderId: "1053594802498",
+  appId: "1:1053594802498:web:001475f5ca348149f850db"
 };
 
 const app = initializeApp(firebaseConfig);

@@ -42,7 +42,7 @@ export const STORAGE_TYPES: Record<StorageKey, { label: string; icon: string }> 
 
 
 export interface Product {
-  id: number;
+  id: string | number;
   name: string;
   category: CategoryKey;
   quantity: string; // Describes weight/volume (e.g. "500g", "1L")
@@ -55,7 +55,7 @@ export interface Product {
 }
 
 export interface ShoppingItem {
-  id: number;
+  id: string | number;
   name:string;
   category: CategoryKey;
   quantity: string;
@@ -65,6 +65,7 @@ export interface ShoppingItem {
 }
 
 export interface ScannedItem {
+    id?: string | number;
     code: string;
     name: string;
     image?: string;
@@ -77,7 +78,7 @@ export type NotificationType = 'expiry-soon' | 'expired' | 'low-stock' | 'added'
 export type NotificationFilter = 'all' | 'expiry' | 'stock';
 
 export interface Notification {
-  id: number;
+  id: string | number;
   type: NotificationType;
   icon: string;
   title: string;
@@ -87,7 +88,7 @@ export interface Notification {
 }
 
 export interface Recipe {
-    id: number;
+    id: string | number;
     title: string;
     subtitle: string;
     prepTime: string;

@@ -16,7 +16,7 @@ import {
     User as FirebaseUser,
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, onSnapshot, writeBatch, serverTimestamp, query, orderBy } from 'firebase/firestore';
 
 // --- ERROR HANDLING ---
 enum OperationType {
@@ -220,9 +220,9 @@ const App: React.FC = () => {
     const [screen, setScreen] = useState<Screen>('splash');
     const [user, setUser] = useState<User | null>(null);
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-    const [products, setProducts] = usePersistentState<Product[]>(FOOID_PRODUCTS_KEY, MOCK_PRODUCTS);
-    const [shoppingList, setShoppingList] = usePersistentState<ShoppingItem[]>(FOOID_SHOPPING_LIST_KEY, []);
-    const [scannedHistory, setScannedHistory] = usePersistentState<ScannedItem[]>(FOOID_SCANNED_HISTORY_KEY, []);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
+    const [scannedHistory, setScannedHistory] = useState<ScannedItem[]>([]);
     
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [readNotificationIds, setReadNotificationIds] = usePersistentState<number[]>(FOOID_NOTIFICATIONS_KEY, []);
@@ -277,6 +277,42 @@ const App: React.FC = () => {
             setDeferredPrompt(null);
         });
     };
+
+    // --- FIRESTORE LISTENERS ---
+    useEffect(() => {
+        if (!user || !auth.currentUser) {
+            setProducts([]);
+            setShoppingList([]);
+            setScannedHistory([]);
+            return;
+        }
+
+        const uid = auth.currentUser.uid;
+        
+        const unsubProducts = onSnapshot(collection(db, `users/${uid}/products`), (snapshot) => {
+            const data: Product[] = [];
+            snapshot.forEach(d => data.push(d.data() as Product));
+            setProducts(data);
+        });
+
+        const unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
+            const data: ShoppingItem[] = [];
+            snapshot.forEach(d => data.push(d.data() as ShoppingItem));
+            setShoppingList(data);
+        });
+
+        const unsubHistory = onSnapshot(collection(db, `users/${uid}/scannedHistory`), (snapshot) => {
+            const data: ScannedItem[] = [];
+            snapshot.forEach(d => data.push(d.data() as ScannedItem));
+            setScannedHistory(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+        });
+
+        return () => {
+            unsubProducts();
+            unsubShopping();
+            unsubHistory();
+        };
+    }, [user]);
 
     // --- FONT SIZE EFFECT ---
     useEffect(() => {
@@ -474,74 +510,119 @@ const App: React.FC = () => {
         setReadNotificationIds(uniqueIds);
     };
     
-    const handleAddProduct = (product: Omit<Product, 'id'>) => {
-        setProducts(prev => [...prev, { ...product, id: Date.now() }]);
+    const handleAddProduct = async (product: Omit<Product, 'id'>) => {
+        if (!auth.currentUser) return;
+        const newId = String(Date.now());
+        const newProduct = { ...product, id: newId };
         
-        if (scannedHistory.length > 0) {
-            setScannedHistory(prev => {
-                const newHistory = [...prev];
-                if (newHistory.length > 0) {
-                    newHistory[0] = {
-                        ...newHistory[0],
+        try {
+            await setDoc(doc(db, `users/${auth.currentUser.uid}/products`, newId), newProduct);
+            
+            if (scannedHistory.length > 0) {
+                const latestScan = scannedHistory[0];
+                if (latestScan.id) {
+                    await updateDoc(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, String(latestScan.id)), {
                         name: product.name,
                         quantity: product.quantity,
                         expiryDate: product.expiryDate,
-                        image: product.image // Ensure image is also synced to history
-                    };
+                        image: product.image || latestScan.image
+                    });
                 }
-                return newHistory;
-            });
-        }
+            }
+        } catch(e) { console.error("Error adding product", e); }
 
         setAddProductModalOpen(false);
         setAddProductInitialData(null);
     };
 
-    const handleUpdateProduct = (updatedProduct: Product) => {
-        setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    const handleUpdateProduct = async (updatedProduct: Product) => {
+        if (!auth.currentUser) return;
+        try {
+            await updateDoc(doc(db, `users/${auth.currentUser.uid}/products`, String(updatedProduct.id)), updatedProduct as any);
+        } catch(e) { console.error(e); }
         setEditingProduct(null);
     };
 
-    const handleDeleteProduct = (productId: number) => {
-        setProducts(prev => prev.filter(p => p.id !== productId));
+    const handleDeleteProduct = async (productId: string | number) => {
+        if (!auth.currentUser) return;
+        try {
+            await deleteDoc(doc(db, `users/${auth.currentUser.uid}/products`, String(productId)));
+        } catch(e) { console.error(e); }
     };
     
-    const handleAddShoppingItem = (item: Omit<ShoppingItem, 'id' | 'checked'>) => {
-        setShoppingList(prev => [...prev, { ...item, id: Date.now(), checked: false }]);
+    const handleAddShoppingItem = async (item: Omit<ShoppingItem, 'id' | 'checked'>) => {
+        if (!auth.currentUser) return;
+        const newId = String(Date.now());
+        try {
+            await setDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, newId), { ...item, id: newId, checked: false });
+        } catch(e) { console.error(e); }
         setAddShoppingItemModalOpen(false);
     };
 
-    const handleUpdateShoppingItem = (updatedItem: ShoppingItem) => {
-        setShoppingList(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
+    const handleUpdateShoppingItem = async (updatedItem: ShoppingItem) => {
+        if (!auth.currentUser) return;
+        try {
+            await updateDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(updatedItem.id)), updatedItem as any);
+        } catch(e) { console.error(e); }
         setEditingShoppingItem(null);
     };
 
-    const handleAddFromPantry = (selectedProducts: Product[]) => {
-        const newItems = selectedProducts.map(p => ({
-            id: Date.now() + Math.random(),
-            name: p.name,
-            category: p.category,
-            quantity: '1 un',
-            checked: false
-        }));
-        setShoppingList(prev => [...prev, ...newItems]);
+    const handleAddFromPantry = async (selectedProducts: Product[]) => {
+        if (!auth.currentUser) return;
+        try {
+            const batch = writeBatch(db);
+            selectedProducts.forEach(p => {
+                const newId = String(Date.now() + Math.random());
+                const ref = doc(db, `users/${auth.currentUser.uid}/shoppingList`, newId);
+                batch.set(ref, {
+                    id: newId,
+                    name: p.name,
+                    category: p.category,
+                    quantity: '1 un',
+                    checked: false
+                });
+            });
+            await batch.commit();
+        } catch(e) { console.error(e); }
         setAddFromPantryModalOpen(false);
     };
 
-    const handleToggleShoppingItem = (itemId: number) => {
-        setShoppingList(prev => prev.map(item => item.id === itemId ? { ...item, checked: !item.checked } : item));
+    const handleToggleShoppingItem = async (itemId: string | number) => {
+        if (!auth.currentUser) return;
+        const item = shoppingList.find(i => i.id === itemId);
+        if (!item) return;
+        try {
+            await updateDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(itemId)), { checked: !item.checked });
+        } catch(e) { console.error(e); }
     };
 
-    const handleDeleteShoppingItem = (itemId: number) => {
-        setShoppingList(prev => prev.filter(item => item.id !== itemId));
+    const handleDeleteShoppingItem = async (itemId: string | number) => {
+        if (!auth.currentUser) return;
+        try {
+            await deleteDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(itemId)));
+        } catch(e) { console.error(e); }
     };
 
-    const handleClearPurchased = () => {
-        setShoppingList(prev => prev.filter(item => !item.checked));
+    const handleClearPurchased = async () => {
+        if (!auth.currentUser) return;
+        try {
+            const batch = writeBatch(db);
+            shoppingList.filter(item => item.checked).forEach(item => {
+                batch.delete(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(item.id)));
+            });
+            await batch.commit();
+        } catch(e) { console.error(e); }
     };
 
-    const handleClearHistory = () => {
-        setScannedHistory([]);
+    const handleClearHistory = async () => {
+        if (!auth.currentUser) return;
+        try {
+            const batch = writeBatch(db);
+            scannedHistory.forEach(item => {
+                if (item.id) batch.delete(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, String(item.id)));
+            });
+            await batch.commit();
+        } catch(e) { console.error(e); }
     };
 
     const handleScanSuccess = async (rawCode: string) => {
@@ -605,14 +686,18 @@ const App: React.FC = () => {
             const quantity = p.quantity || p.product_quantity || (p.net_weight_value ? `${p.net_weight_value}${p.net_weight_unit || ''}` : '') || '1 un';
             const category = smartCategorize(p.categories || '', productName);
 
+            const newItemId = String(Date.now());
             const newItem: ScannedItem = {
+                id: newItemId,
                 code: lookupCode,
                 name: productName,
                 image: image,
                 timestamp: new Date().toISOString(),
                 quantity: quantity
             };
-            setScannedHistory(prev => [newItem, ...prev].slice(0, 20));
+            if (auth.currentUser) {
+                setDoc(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, newItemId), newItem).catch(console.error);
+            }
 
             setTempScannedData({
                 name: productName,
@@ -630,13 +715,17 @@ const App: React.FC = () => {
             console.error("Erro ao buscar produto:", error);
             
             const fallbackName = `Produto ${lookupCode}`;
+            const newItemId = String(Date.now());
             const newItem: ScannedItem = {
+                id: newItemId,
                 code: lookupCode,
                 name: fallbackName,
                 timestamp: new Date().toISOString(),
                 quantity: '1 un'
             };
-            setScannedHistory(prev => [newItem, ...prev].slice(0, 20));
+            if (auth.currentUser) {
+                setDoc(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, newItemId), newItem).catch(console.error);
+            }
 
             setTempScannedData({ 
                 name: fallbackName, 

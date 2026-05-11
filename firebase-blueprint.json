@@ -1,0 +1,44 @@
+{
+  "users": {
+    "{userId}": {
+      "name": "string",
+      "email": "string",
+      "createdAt": "timestamp",
+      "products": {
+        "{productId}": {
+          "id": "string",
+          "name": "string",
+          "category": "string",
+          "quantity": "string",
+          "unit": "number",
+          "expiryDate": "string",
+          "storage": "string",
+          "notes": "string (optional)",
+          "image": "string (optional)",
+          "barcode": "string (optional)"
+        }
+      },
+      "shoppingList": {
+        "{itemId}": {
+          "id": "string",
+          "name": "string",
+          "category": "string",
+          "quantity": "string",
+          "estimatedPrice": "string (optional)",
+          "notes": "string (optional)",
+          "checked": "boolean"
+        }
+      },
+      "scannedHistory": {
+        "{historyId}": {
+          "code": "string",
+          "name": "string",
+          "image": "string (optional)",
+          "timestamp": "string",
+          "quantity": "string (optional)",
+          "expiryDate": "string (optional)"
+        }
+      }
+    }
+  }
+}
