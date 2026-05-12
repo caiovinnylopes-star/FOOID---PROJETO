@@ -539,6 +539,10 @@ const App: React.FC = () => {
         const newId = String(Date.now());
         const newProduct = { ...product, id: newId };
         
+        // Fecha o modal imediatamente para não deixar o usuário clicar duas vezes
+        setAddProductModalOpen(false);
+        setAddProductInitialData(null);
+        
         try {
             await setDoc(doc(db, `users/${auth.currentUser.uid}/products`, newId), newProduct);
             
@@ -554,9 +558,6 @@ const App: React.FC = () => {
                 }
             }
         } catch(e) { console.error("Error adding product", e); }
-
-        setAddProductModalOpen(false);
-        setAddProductInitialData(null);
     };
 
     const handleUpdateProduct = async (updatedProduct: Product) => {
@@ -577,10 +578,13 @@ const App: React.FC = () => {
     const handleAddShoppingItem = async (item: Omit<ShoppingItem, 'id' | 'checked'>) => {
         if (!auth.currentUser) return;
         const newId = String(Date.now());
+        
+        // Fecha o modal imediatamente
+        setAddShoppingItemModalOpen(false);
+        
         try {
             await setDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, newId), { ...item, id: newId, checked: false });
         } catch(e) { console.error(e); }
-        setAddShoppingItemModalOpen(false);
     };
 
     const handleUpdateShoppingItem = async (updatedItem: ShoppingItem) => {
