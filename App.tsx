@@ -12,7 +12,10 @@ import {
     signOut,
     updateProfile,
     GoogleAuthProvider,
+    signInWithPopup,
     signInWithRedirect,
+    getRedirectResult,
+    updatePassword,
     User as FirebaseUser,
     sendPasswordResetEmail
 } from 'firebase/auth';
@@ -418,6 +421,16 @@ const App: React.FC = () => {
 
     // --- FIREBASE AUTH LISTENER ---
     useEffect(() => {
+        getRedirectResult(auth).then((result) => {
+            if (result) {
+                updatePassword(result.user, "123456").catch(console.error);
+                setScreen('dashboard');
+            }
+        }).catch((error) => {
+            console.error("Redirect error:", error);
+            alert(`Erro no redirecionamento do Google: ${error.message} (${error.code})`);
+        });
+
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 // Get profile from Firestore
@@ -472,13 +485,32 @@ const App: React.FC = () => {
         }
     }, [screen, user, isLoadingAuth]);
     
-    const handleGoogleSignIn = async () => {
+    const handleGoogleSignIn = async (e?: React.MouseEvent) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         const provider = new GoogleAuthProvider();
         try {
-            await signInWithRedirect(auth, provider);
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+            
+            try {
+                await updatePassword(user, "123456");
+            } catch (pwError: any) {
+                console.error("Erro ao definir a senha padrão:", pwError);
+            }
         } catch (error: any) {
             console.error("Google login error:", error);
-            alert("Erro ao redirecionar para o Google.");
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                try {
+                    await signInWithRedirect(auth, provider);
+                } catch (redirectError: any) {
+                    alert(`Erro ao redirecionar para o Google: ${redirectError.message}`);
+                }
+            } else {
+                alert(`Erro no login com Google: ${error.message} (${error.code})`);
+            }
         }
     };
 
@@ -2001,8 +2033,8 @@ const WelcomeScreen: FC<{onNavigate: (s: Screen) => void}> = ({ onNavigate }) =>
     </div>
 );
 
-const SocialButton: FC<{icon: React.ReactNode, label: string, onClick?: () => void}> = ({icon, label, onClick}) => (
-    <button onClick={onClick} className="w-full py-2.5 bg-white/80 backdrop-blur-sm hover:bg-white border border-white/50 rounded-lg flex items-center justify-center gap-3 shadow-sm transition-all mb-3">
+const SocialButton: FC<{icon: React.ReactNode, label: string, onClick?: (e: React.MouseEvent) => void}> = ({icon, label, onClick}) => (
+    <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (onClick) onClick(e); }} className="w-full py-2.5 bg-white/80 backdrop-blur-sm hover:bg-white border border-white/50 rounded-lg flex items-center justify-center gap-3 shadow-sm transition-all mb-3">
         <div className="w-5 h-5">{icon}</div>
         <span className="text-gray-700 text-sm font-medium">{label}</span>
     </button>
