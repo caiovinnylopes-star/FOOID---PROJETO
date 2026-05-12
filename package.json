@@ -13,6 +13,7 @@
     "@google/genai": "^1.29.1",
     "@zxing/library": "0.20.0",
     "firebase": "^12.13.0",
+    "html5-qrcode": "^2.3.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

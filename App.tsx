@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo, FC, useRef } from 're
 import { Screen, User, Product, ShoppingItem, Notification, Settings, Recipe, NotificationFilter, CategoryKey, StorageKey, CATEGORIES, STORAGE_TYPES, ScannedItem, NotificationType, NFCeProduct } from './types';
 import { HomeIcon, PantryIcon, BellIcon, MenuIcon, PlusIcon, ArrowLeftIcon, TrashIcon, PencilIcon, ScannerIcon, UserIcon, CloseIcon, RecipeIcon, SettingsIcon, ShoppingListIcon, GoogleIcon, FacebookIcon, AppleIcon, BarcodeIcon, CameraIcon, MicIcon, SparklesIcon, ReceiptIcon } from './components/Icons';
 import ScannerComponent from './components/ScannerComponent';
+import QRScannerComponent from './components/QRScannerComponent';
 import { GoogleGenAI, Type } from "@google/genai";
 import { auth, db } from './firebase';
 import { 
@@ -962,7 +963,11 @@ Retorne apenas JSON puro`;
                 {mainContent}
             </main>
 
-            {isScannerOpen && <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />}
+            {isScannerOpen && (
+                scannerMode === 'barcode' 
+                    ? <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
+                    : <QRScannerComponent onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
+            )}
             {isFetchingScannedProduct && <LoadingSpinner message="Buscando dados do produto..." />}
             
             {isDateSelectionModalOpen && (
