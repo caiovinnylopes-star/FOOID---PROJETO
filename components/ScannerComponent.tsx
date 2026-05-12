@@ -91,12 +91,12 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
             // Tiered fallback strategy for constraints
             let constraints: MediaStreamConstraints;
             if (fallbackLevel === 0) {
-                // Tier 1: Balanced Resolution (HD) - Better compatibility than FHD
+                // Tier 1: High Resolution (FHD) - Crucial for dense NFC-e QR Codes
                 constraints = {
                     video: {
                         facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
                     }
                 };
             } else if (fallbackLevel === 1) {
@@ -205,8 +205,8 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
                 max: zoomCap.max,
                 step: zoomCap.step
             });
-            // Define um zoom inicial de 1.5x se possível para ajudar no foco
-            const initialZoom = Math.min(zoomCap.max, Math.max(zoomCap.min, 1.5));
+            // Define zoom inicial como mínimo (geralmente 1x) para evitar perda de nitidez em QR Codes densos
+            const initialZoom = zoomCap.min;
             setCurrentZoom(initialZoom);
             applyZoom(initialZoom, track);
         }
@@ -222,11 +222,17 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
         const t = track || streamRef.current?.getVideoTracks()[0];
         if (t) {
             try {
+                const capabilities = t.getCapabilities ? t.getCapabilities() : {};
+                const advanced: any = { zoom: value };
+                if (capabilities && 'focusMode' in capabilities) {
+                    advanced.focusMode = 'continuous';
+                }
+                
                 await t.applyConstraints({
-                    advanced: [{ zoom: value }]
+                    advanced: [advanced]
                 } as any);
             } catch (e) {
-                console.warn("Zoom não aplicado:", e);
+                console.warn("Constraint não aplicada:", e);
             }
         }
     };
