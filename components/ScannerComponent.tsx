@@ -5,6 +5,7 @@ import { BrowserMultiFormatReader } from '@zxing/library';
 interface ScannerComponentProps {
     onScanSuccess: (value: string) => void;
     onClose: () => void;
+    mode?: 'barcode' | 'qrcode' | 'nfce';
 }
 
 // Definição de tipos para a API Nativa BarcodeDetector (Chrome/Android)
@@ -14,7 +15,7 @@ declare class BarcodeDetector {
   static getSupportedFormats(): Promise<string[]>;
 }
 
-const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onClose }) => {
+const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onClose, mode = 'barcode' }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -205,8 +206,10 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
                 max: zoomCap.max,
                 step: zoomCap.step
             });
-            // Define zoom inicial como mínimo (geralmente 1x) para evitar perda de nitidez em QR Codes densos
-            const initialZoom = zoomCap.min;
+            // Se for QR Code ou NFC-e, forçar zoom inicial de 2x para permitir que o celular fique mais longe e mantenha o foco
+            const initialZoom = (mode === 'qrcode' || mode === 'nfce') 
+                ? Math.min(zoomCap.max, Math.max(zoomCap.min, 2.0))
+                : zoomCap.min;
             setCurrentZoom(initialZoom);
             applyZoom(initialZoom, track);
         }
@@ -535,9 +538,12 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
                     </div>
                     
                     {/* Tip */}
-                    <div className="mt-8 bg-black/60 px-4 py-2 rounded-full backdrop-blur-sm">
-                        <p className="text-white text-xs font-medium">
-                            Aproxime para focar • Afaste para ler
+                    <div className="mt-8 bg-black/60 px-4 py-2 rounded-full backdrop-blur-sm shadow-xl text-center">
+                        <p className="text-yellow-400 font-bold text-xs mb-1 uppercase tracking-wider animate-pulse">
+                            Câmera Embaçada?
+                        </p>
+                        <p className="text-white text-[11px] font-medium leading-tight">
+                            Afaste o celular uns 20cm da nota<br/>e use a barra de ZOOM abaixo.
                         </p>
                     </div>
 

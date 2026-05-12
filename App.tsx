@@ -962,7 +962,7 @@ Retorne apenas JSON puro`;
                 {mainContent}
             </main>
 
-            {isScannerOpen && <ScannerComponent onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />}
+            {isScannerOpen && <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />}
             {isFetchingScannedProduct && <LoadingSpinner message="Buscando dados do produto..." />}
             
             {isDateSelectionModalOpen && (
