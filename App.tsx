@@ -234,6 +234,7 @@ const App: React.FC = () => {
     const [settings, setSettings] = usePersistentState<Settings>(FOOID_SETTINGS_KEY, DEFAULT_SETTINGS);
     
     const [isScannerOpen, setScannerOpen] = useState(false);
+    const [scannerMode, setScannerMode] = useState<'barcode' | 'qrcode' | 'nfce'>('barcode');
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     
     const [isAddProductModalOpen, setAddProductModalOpen] = useState(false);
@@ -660,7 +661,7 @@ const App: React.FC = () => {
         if (rawCode.startsWith('http') || rawCode.includes('://') || rawCode.startsWith('www.')) {
             const lowerCode = rawCode.toLowerCase();
             // Check if it's an NFC-e link
-            if (lowerCode.includes('sefaz') || lowerCode.includes('fazenda') || lowerCode.includes('nfe') || lowerCode.includes('nfce')) {
+            if (scannerMode === 'nfce' || lowerCode.includes('sefaz') || lowerCode.includes('fazenda') || lowerCode.includes('nfe') || lowerCode.includes('nfce')) {
                 handleNFCeScan(rawCode);
                 return;
             }
@@ -779,9 +780,29 @@ const App: React.FC = () => {
     const handleNFCeScan = async (url: string) => {
         setIsFetchingScannedProduct(true);
         try {
+            // 1. Fetch HTML via CORS Proxy
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error("Erro ao acessar proxy");
+            const proxyData = await res.json();
+            const htmlContent = proxyData.contents;
+            
+            // 2. Extract raw text from HTML
+            const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
+            const elementsToRemove = doc.querySelectorAll('script, style, noscript, svg, img');
+            for (let i = 0; i < elementsToRemove.length; i++) {
+                 elementsToRemove[i].remove();
+            }
+            let text = doc.body.innerText || "";
+            text = text.replace(/\s+/g, ' ').trim();
+
+            // 3. Process with AI
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e), com foco em supermercados.
-Sua tarefa é usar obrigatoriamente a ferramenta de busca para ACESSAR e LER o conteúdo da nota fiscal deste link: ${url}
+Abaixo está o texto extraído da página da nota fiscal:
+---
+${text.substring(0, 20000)}
+---
 Extraia TODOS os produtos da nota.
 Para cada produto, retornar:
 nome_original (exatamente como está na nota)
@@ -822,8 +843,7 @@ Retorne apenas JSON puro`;
                 model: 'gemini-3-flash-preview', 
                 contents: prompt, 
                 config: { 
-                    responseMimeType: "application/json",
-                    tools: [{ googleSearch: {} }] 
+                    responseMimeType: "application/json"
                 } 
             });
 
@@ -838,7 +858,7 @@ Retorne apenas JSON puro`;
             }
         } catch (error) {
             console.error("Erro ao processar NFC-e:", error);
-            alert("Erro ao processar a nota fiscal. Tente novamente ou acesse o link manualmente.");
+            alert("Não foi possível ler a nota automaticamente (bloqueio do site da Sefaz). Acessando o link...");
             setScannedLink(url);
         } finally {
             setIsFetchingScannedProduct(false);
@@ -903,7 +923,7 @@ Retorne apenas JSON puro`;
             mainContent = <PantryScreen {...commonProps} products={products} onAddClick={() => setAddProductModalOpen(true)} onEditProduct={setEditingProduct} onDeleteProduct={handleDeleteProduct} />;
             break;
         case 'scanner':
-            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={() => setScannerOpen(true)} />;
+            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} />;
             break;
         case 'notifications':
             mainContent = <NotificationsScreen {...commonProps} notifications={notifications} onMarkAllRead={handleMarkAllNotificationsRead} />;
@@ -2502,13 +2522,13 @@ const NFCeImportModal: FC<{ products: NFCeProduct[], onClose: () => void, onConf
     );
 };
 
-const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: () => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, scannedHistory, onClearHistory, darkMode, highContrast }) => (
+const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode' | 'qrcode' | 'nfce') => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, scannedHistory, onClearHistory, darkMode, highContrast }) => (
     <ScreenWrapper darkMode={darkMode} highContrast={highContrast}>
         <PageHeader title="Leitor QR/Código" onBack={() => onNavigate('dashboard')} darkMode={darkMode} highContrast={highContrast} />
         <div className="p-4 space-y-4">
-             <button onClick={onOpenScanner} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><BarcodeIcon className="w-6 h-6"/> Ler Código de Barras</button>
-             <button onClick={onOpenScanner} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ScannerIcon className="w-6 h-6"/> Ler QR Code</button>
-             <button onClick={onOpenScanner} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ReceiptIcon className="w-6 h-6"/> Escanear Nota Fiscal (NFC-e)</button>
+             <button onClick={() => onOpenScanner('barcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><BarcodeIcon className="w-6 h-6"/> Ler Código de Barras</button>
+             <button onClick={() => onOpenScanner('qrcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ScannerIcon className="w-6 h-6"/> Ler QR Code</button>
+             <button onClick={() => onOpenScanner('nfce')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ReceiptIcon className="w-6 h-6"/> Escanear Nota Fiscal (NFC-e)</button>
         </div>
         <div className="px-4 pt-2 flex justify-between items-center"><h2 className={`font-bold ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-gray-400' : 'text-gray-600')}`}>Últimos Escaneados</h2>{scannedHistory.length > 0 && <button onClick={onClearHistory} className={`text-xs font-bold ${highContrast ? 'text-yellow-400' : 'text-red-500'}`}>Limpar</button>}</div>
         <div className="flex-grow overflow-y-auto p-4 space-y-3">
