@@ -225,14 +225,8 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
         const t = track || streamRef.current?.getVideoTracks()[0];
         if (t) {
             try {
-                const capabilities = t.getCapabilities ? t.getCapabilities() : {};
-                const advanced: any = { zoom: value };
-                if (capabilities && 'focusMode' in capabilities) {
-                    advanced.focusMode = 'continuous';
-                }
-                
                 await t.applyConstraints({
-                    advanced: [advanced]
+                    advanced: [{ zoom: value }]
                 } as any);
             } catch (e) {
                 console.warn("Constraint não aplicada:", e);
