@@ -40,7 +40,12 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
         };
 
         html5QrCode.start(
-            { facingMode: "environment" },
+            { 
+                facingMode: "environment",
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                advanced: [{ focusMode: "continuous" } as any, { focusMode: "macro" } as any]
+            },
             config,
             (decodedText) => {
                 if (!isUnmounted) {
