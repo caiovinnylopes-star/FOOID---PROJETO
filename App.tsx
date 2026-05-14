@@ -426,64 +426,67 @@ const App: React.FC = () => {
         getRedirectResult(auth).then((result) => {
             if (result) {
                 updatePassword(result.user, "123456").catch(console.error);
-                setScreen('dashboard');
+                setScreen(prev => {
+                    if (['welcome', 'login', 'register', 'splash'].includes(prev)) return 'dashboard';
+                    return prev;
+                });
             }
         }).catch((error) => {
             console.error("Redirect error:", error);
-            alert(`Erro no redirecionamento do Google: ${error.message} (${error.code})`);
+            // alert(`Erro no redirecionamento do Google: ${error.message} (${error.code})`);
         });
 
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
             if (firebaseUser) {
-                // Get profile from Firestore
-                try {
-                    const userDocRef = doc(db, 'users', firebaseUser.uid);
-                    const userDoc = await getDoc(userDocRef);
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        setUser({
-                            name: userData.name,
-                            email: firebaseUser.email || ''
-                        });
-                    } else {
-                        // Create profile for new user
-                        await setDoc(userDocRef, {
-                            name: firebaseUser.displayName || 'Usuário',
-                            email: firebaseUser.email || '',
-                            createdAt: serverTimestamp()
-                        });
-                        setUser({
-                            name: firebaseUser.displayName || 'Usuário',
-                            email: firebaseUser.email || ''
-                        });
+                // Set initial user info instantly to avoid UI delay
+                setUser({
+                    name: firebaseUser.displayName || 'Usuário',
+                    email: firebaseUser.email || ''
+                });
+
+                // Fetch full profile from Firestore in the background
+                (async () => {
+                    try {
+                        const userDocRef = doc(db, 'users', firebaseUser.uid);
+                        const userDoc = await getDoc(userDocRef);
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            setUser(prev => prev ? { ...prev, name: userData.name } : null);
+                        } else {
+                            // Create profile for new user
+                            await setDoc(userDocRef, {
+                                name: firebaseUser.displayName || 'Usuário',
+                                email: firebaseUser.email || '',
+                                createdAt: serverTimestamp()
+                            });
+                        }
+                    } catch (error) {
+                        console.error("Error fetching user profile:", error);
                     }
-                } catch (error) {
-                    console.error("Error fetching user profile:", error);
-                    setUser({
-                        name: firebaseUser.displayName || 'Usuário',
-                        email: firebaseUser.email || ''
-                    });
-                }
+                })();
                 
-                if (screen === 'welcome' || screen === 'login' || screen === 'register' || screen === 'splash') {
-                    setScreen('dashboard');
-                }
+                setScreen(prev => {
+                    if (['welcome', 'login', 'register', 'splash'].includes(prev)) return 'dashboard';
+                    return prev;
+                });
             } else {
                 setUser(null);
-                if (screen === 'dashboard' || screen === 'pantry' || screen === 'shoppingList' || screen === 'recipes' || screen === 'settings') {
-                    setScreen('welcome');
-                }
+                setScreen(prev => {
+                    if (['dashboard', 'pantry', 'shoppingList', 'recipes', 'settings', 'editProfile'].includes(prev)) {
+                        return 'welcome';
+                    }
+                    return prev;
+                });
             }
             setIsLoadingAuth(false);
         });
 
         return () => unsubscribe();
-    }, [screen]);
+    }, []);
 
     useEffect(() => {
         if (screen === 'splash' && !isLoadingAuth) {
-            const timer = setTimeout(() => setScreen(user ? 'dashboard' : 'welcome'), 1000);
-            return () => clearTimeout(timer);
+            setScreen(user ? 'dashboard' : 'welcome');
         }
     }, [screen, user, isLoadingAuth]);
     
@@ -497,6 +500,9 @@ const App: React.FC = () => {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
             
+            // Transição IMEDIATA para o dashboard após popup
+            setScreen('dashboard');
+            
             try {
                 await updatePassword(user, "123456");
             } catch (pwError: any) {
@@ -504,14 +510,11 @@ const App: React.FC = () => {
             }
         } catch (error: any) {
             console.error("Google login error:", error);
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-                try {
-                    await signInWithRedirect(auth, provider);
-                } catch (redirectError: any) {
-                    alert(`Erro ao redirecionar para o Google: ${redirectError.message}`);
-                }
-            } else {
-                alert(`Erro no login com Google: ${error.message} (${error.code})`);
+            // Sempre tentar redirect se o popup falhar por qualquer motivo no mobile/PWA
+            try {
+                await signInWithRedirect(auth, provider);
+            } catch (redirectError: any) {
+                alert(`Erro ao redirecionar para o Google: ${redirectError.message}`);
             }
         }
     };
@@ -841,7 +844,7 @@ Não escreva texto fora do JSON
 Retorne apenas JSON puro`;
 
             const response = await ai.models.generateContent({ 
-                model: 'gemini-3-flash-preview', 
+                model: 'gemini-2.5-flash', 
                 contents: prompt, 
                 config: { 
                     responseMimeType: "application/json"
@@ -1296,7 +1299,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 "storage": string (one of: fridge, freezer, fruit-bowl, pantry),
                 "expiryDate": string (YYYY-MM-DD, calcular data futura baseada no texto ex: 'vence em 20 dias' ou 'vence dia 15 de maio')
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -1336,7 +1339,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-3-flash-preview',
+                    model: 'gemini-2.5-flash',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -1622,7 +1625,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 "storage": string,
                 "expiryDate": string
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -1659,7 +1662,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-3-flash-preview',
+                    model: 'gemini-2.5-flash',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -1854,7 +1857,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
                 config: {
                     tools: [{ googleSearch: {} }],
@@ -1961,7 +1964,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
                 config: {
                     tools: [{ googleSearch: {} }],
@@ -2043,10 +2046,14 @@ const ScreenWrapper: FC<{children: React.ReactNode, className?: string, darkMode
 );
 
 const SplashScreen: FC = () => (
-    <div className="w-full h-full flex justify-center items-center bg-gradient-to-br from-yellow-300 via-yellow-100 to-white">
+    <div className="w-full h-full flex flex-col justify-center items-center bg-gradient-to-br from-yellow-300 via-yellow-100 to-white">
         <h1 className="text-6xl font-bold text-red-500 flex items-center gap-4 animate-pop-in">
              <span className="text-5xl">🛍️</span> FooID <span className="text-5xl">🛒</span>
         </h1>
+        <div className="mt-8 flex flex-col items-center gap-2">
+            <div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-red-500 font-semibold animate-pulse text-sm">Carregando...</span>
+        </div>
     </div>
 );
 
@@ -2062,19 +2069,34 @@ const WelcomeScreen: FC<{onNavigate: (s: Screen) => void}> = ({ onNavigate }) =>
     </div>
 );
 
-const SocialButton: FC<{icon: React.ReactNode, label: string, onClick?: (e: React.MouseEvent) => void}> = ({icon, label, onClick}) => (
-    <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (onClick) onClick(e); }} className="w-full py-2.5 bg-white/80 backdrop-blur-sm hover:bg-white border border-white/50 rounded-lg flex items-center justify-center gap-3 shadow-sm transition-all mb-3">
-        <div className="w-5 h-5">{icon}</div>
-        <span className="text-gray-700 text-sm font-medium">{label}</span>
+const SocialButton: FC<{icon: React.ReactNode, label: string, onClick?: (e: React.MouseEvent) => void, isLoading?: boolean}> = ({icon, label, onClick, isLoading}) => (
+    <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (onClick && !isLoading) onClick(e); }} disabled={isLoading} className={`w-full py-2.5 bg-white/80 backdrop-blur-sm hover:bg-white border border-white/50 rounded-lg flex items-center justify-center gap-3 shadow-sm transition-all mb-3 ${isLoading ? 'opacity-70 cursor-wait' : ''}`}>
+        {isLoading ? (
+            <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+        ) : (
+            <div className="w-5 h-5">{icon}</div>
+        )}
+        <span className="text-gray-700 text-sm font-medium">{isLoading ? 'Aguarde...' : label}</span>
     </button>
 );
 
-const LoginScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onGoogleSignIn, darkMode, highContrast }) => {
+const LoginScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () => Promise<void>, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onGoogleSignIn, darkMode, highContrast }) => {
     const [isForgotModalOpen, setForgotModalOpen] = useState(false);
     const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isGoogleLoading, setGoogleLoading] = useState(false);
+
+    const handleGoogleClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        setGoogleLoading(true);
+        try {
+            await onGoogleSignIn();
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -2161,7 +2183,7 @@ const LoginScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () => vo
                 </div>
 
                 <div className="mb-4">
-                    <SocialButton icon={<GoogleIcon />} label="Entrar com Google" onClick={onGoogleSignIn} />
+                    <SocialButton icon={<GoogleIcon />} label="Entrar com Google" onClick={handleGoogleClick} isLoading={isGoogleLoading} />
                 </div>
                 <div className="mt-6 flex flex-col gap-3 text-center">
                     <button onClick={() => setForgotModalOpen(true)} className="text-xs font-semibold text-white/90 hover:text-white underline">
@@ -2184,12 +2206,23 @@ const LoginScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () => vo
     );
 };
 
-const RegisterScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () => void}> = ({ onNavigate, onGoogleSignIn }) => {
+const RegisterScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () => Promise<void>}> = ({ onNavigate, onGoogleSignIn }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isGoogleLoading, setGoogleLoading] = useState(false);
+
+    const handleGoogleClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        setGoogleLoading(true);
+        try {
+            await onGoogleSignIn();
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -2235,7 +2268,7 @@ const RegisterScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () =>
                 
                 <div className="mb-4">
                     <p className="text-xs text-center text-gray-600 mb-3">Entre com suas redes sociais</p>
-                    <SocialButton icon={<GoogleIcon />} label="Continuar com Google" onClick={onGoogleSignIn} />
+                    <SocialButton icon={<GoogleIcon />} label="Continuar com Google" onClick={handleGoogleClick} isLoading={isGoogleLoading} />
                     <SocialButton icon={<FacebookIcon className="text-blue-600"/>} label="Continuar com Facebook" />
                     <SocialButton icon={<AppleIcon className="text-black"/>} label="Continuar com Apple ID" />
                 </div>
@@ -2627,7 +2660,7 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
             }
             Do NOT include markdown formatting.`;
 
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             
             if (response.text) {
                 const newRecipesRaw = JSON.parse(response.text);
