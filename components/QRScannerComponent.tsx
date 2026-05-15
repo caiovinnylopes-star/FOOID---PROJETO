@@ -6,6 +6,9 @@ interface QRScannerComponentProps {
     onClose: () => void;
 }
 
+// --- GLOBAL TRACKER PARA EVITAR CONFLITO DE CÂMERA ---
+let activeScannerStopPromise: Promise<void> | null = null;
+
 const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, onClose }) => {
     const [error, setError] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -39,36 +42,64 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
             disableFlip: false,
         };
 
-        html5QrCode.start(
-            { 
-                facingMode: "environment",
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                advanced: [{ focusMode: "continuous" } as any, { focusMode: "macro" } as any]
-            },
-            config,
-            (decodedText) => {
-                if (!isUnmounted) {
-                    playBeep();
-                    html5QrCode.stop().catch(console.error);
-                    onScanSuccess(decodedText);
-                }
-            },
-            (errorMessage) => {
-                // Ignore parse errors, they happen continuously until a code is found
+        const startScanner = async (retries = 3) => {
+            // Wait for previous scanner to fully stop if needed
+            if (activeScannerStopPromise) {
+                try {
+                    await activeScannerStopPromise;
+                } catch (e) {}
+                activeScannerStopPromise = null;
             }
-        ).catch((err) => {
-            console.error("Erro ao iniciar QR scanner:", err);
-            setError("Não foi possível iniciar a câmera para ler QR Code. Tente novamente ou dê permissão de câmera.");
-        });
+            if (isUnmounted) return;
+
+            try {
+                await html5QrCode.start(
+                    { 
+                        facingMode: "environment",
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        advanced: [{ focusMode: "continuous" } as any, { focusMode: "macro" } as any]
+                    },
+                    config,
+                    (decodedText) => {
+                        if (!isUnmounted) {
+                            playBeep();
+                            try {
+                                const stopPromise = html5QrCode.stop().then(() => html5QrCode.clear()).catch(console.warn);
+                                activeScannerStopPromise = stopPromise;
+                            } catch (e) { console.warn(e); }
+                            onScanSuccess(decodedText);
+                        }
+                    },
+                    (errorMessage) => {
+                        // Ignore parse errors, they happen continuously until a code is found
+                    }
+                );
+            } catch (err) {
+                console.error("Erro ao iniciar QR scanner:", err);
+                if (!isUnmounted) {
+                    if (retries > 0) {
+                        setTimeout(() => startScanner(retries - 1), 600);
+                    } else {
+                        setError("Não foi possível iniciar a câmera para ler QR Code. Tente novamente ou dê permissão de câmera.");
+                    }
+                }
+            }
+        };
+
+        startScanner();
 
         return () => {
             isUnmounted = true;
             if (scannerRef.current) {
                 try {
-                    scannerRef.current.stop().then(() => {
+                    // Html5Qrcode.getState() could be used but it's safer to just try stopping
+                    const stopPromise = scannerRef.current.stop().then(() => {
                         scannerRef.current?.clear();
-                    }).catch(console.warn);
+                    }).catch((e) => {
+                        // It throws if it's not scanning, which is fine to ignore
+                    });
+                    activeScannerStopPromise = stopPromise;
                 } catch (e) {
                     console.warn(e);
                 }
