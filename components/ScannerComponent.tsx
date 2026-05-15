@@ -403,7 +403,9 @@ const ScannerComponent: React.FC<ScannerComponentProps> = ({ onScanSuccess, onCl
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
-                <span className="text-white font-bold tracking-wide drop-shadow-md">Escanear Código</span>
+                <span className="text-white font-bold tracking-wide drop-shadow-md">
+                    {mode === 'nfce' ? 'Escanear Nota Fiscal' : mode === 'qrcode' ? 'Ler QR Code' : 'Escanear Código'}
+                </span>
                 <div className="flex gap-2">
                     {hasTorch && (
                         <button onClick={toggleTorch} className={`p-2 rounded-full backdrop-blur-sm transition-all border ${isTorchOn ? 'bg-yellow-400 text-black border-yellow-400' : 'bg-black/40 text-white border-white/30'}`}>

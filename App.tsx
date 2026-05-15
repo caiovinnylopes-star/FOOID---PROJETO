@@ -967,9 +967,7 @@ Retorne apenas JSON puro`;
             </main>
 
             {isScannerOpen && (
-                scannerMode === 'barcode' 
-                    ? <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
-                    : <QRScannerComponent onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
+                <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
             )}
             {isFetchingScannedProduct && <LoadingSpinner message="Buscando dados do produto..." />}
             
