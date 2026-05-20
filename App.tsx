@@ -253,6 +253,7 @@ const App: React.FC = () => {
     const [scannedLink, setScannedLink] = useState<string | null>(null);
     const [nfceProducts, setNfceProducts] = useState<NFCeProduct[]>([]);
     const [isImportingNfce, setIsImportingNfce] = useState(false);
+    const [isPhotoFallbackModalOpen, setPhotoFallbackModalOpen] = useState(false);
 
     // PWA Install Prompt State
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -862,8 +863,88 @@ Retorne apenas JSON puro`;
             }
         } catch (error) {
             console.error("Erro ao processar NFC-e:", error);
-            alert("Não foi possível ler a nota automaticamente (bloqueio do site da Sefaz). Acessando o link...");
             setScannedLink(url);
+            setPhotoFallbackModalOpen(true);
+        } finally {
+            setIsFetchingScannedProduct(false);
+        }
+    };
+
+    const handleNFCePhotoScan = async (file: File) => {
+        setIsFetchingScannedProduct(true);
+        setPhotoFallbackModalOpen(false);
+        try {
+            const fileToBase64 = (f: File): Promise<string> => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(f);
+                    reader.onload = () => {
+                        const result = reader.result as string;
+                        const base64 = result.split(',')[1];
+                        resolve(base64);
+                    };
+                    reader.onerror = error => reject(error);
+                });
+            };
+
+            const base64Data = await fileToBase64(file);
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            
+            const prompt = `Você é um sistema especialista em extração de dados de fotos de notas fiscais de supermercado brasileiras (NFC-e ou SAT).
+Analise a imagem da nota fiscal e extraia TODOS os produtos listados nela.
+Para cada produto, retorne:
+- nome_original (exatamente como aparece escrito na nota)
+- nome_padronizado (nome simplificado e legível para a despensa, ex: "Arroz", "Leite Integral", "Feijão Preto")
+- quantidade (o número/quantidade comprada)
+- unidade (a unidade de medida, ex: UN, KG, LT, CX, etc. Se não identificar, use UN)
+- categoria (uma destas: Grãos/Massas, Bebidas, Laticínios, Limpeza, Hortifruti, Carnes, Outros)
+
+Retorne APENAS um JSON válido no formato:
+{
+  "produtos": [
+    {
+      "nome_original": "...",
+      "nome_padronizado": "...",
+      "quantidade": 1,
+      "unidade": "UN",
+      "categoria": "..."
+    }
+  ]
+}
+Caso não encontre produtos na imagem, retorne:
+{
+  "produtos": []
+}
+Não dê explicações ou textos fora do JSON.`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                    {
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: file.type
+                        }
+                    },
+                    prompt
+                ],
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            if (response.text) {
+                const data = JSON.parse(response.text);
+                if (data.produtos && data.produtos.length > 0) {
+                    setNfceProducts(data.produtos);
+                    setIsImportingNfce(true);
+                } else {
+                    alert("Nenhum produto foi detectado na imagem desta nota fiscal. Tente tirar uma foto mais nítida e de perto.");
+                }
+            }
+        } catch (error) {
+            console.error("Erro no processamento visual da NFC-e:", error);
+            alert("Não foi possível processar a imagem da nota fiscal. Verifique sua conexão ou tente novamente com outra foto.");
         } finally {
             setIsFetchingScannedProduct(false);
         }
@@ -927,7 +1008,7 @@ Retorne apenas JSON puro`;
             mainContent = <PantryScreen {...commonProps} products={products} onAddClick={() => setAddProductModalOpen(true)} onEditProduct={setEditingProduct} onDeleteProduct={handleDeleteProduct} />;
             break;
         case 'scanner':
-            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} />;
+            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} onPhotoScan={() => setPhotoFallbackModalOpen(true)} />;
             break;
         case 'notifications':
             mainContent = <NotificationsScreen {...commonProps} notifications={notifications} onMarkAllRead={handleMarkAllNotificationsRead} />;
@@ -967,7 +1048,11 @@ Retorne apenas JSON puro`;
             </main>
 
             {isScannerOpen && (
-                <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
+                scannerMode === 'barcode' ? (
+                    <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
+                ) : (
+                    <QRScannerComponent onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
+                )
             )}
             {isFetchingScannedProduct && <LoadingSpinner message="Buscando dados do produto..." />}
             
@@ -999,6 +1084,14 @@ Retorne apenas JSON puro`;
             {editingShoppingItem && <EditShoppingItemModal item={editingShoppingItem} onClose={() => setEditingShoppingItem(null)} onUpdate={handleUpdateShoppingItem} darkMode={darkMode} highContrast={highContrast} />}
             {isAddFromPantryModalOpen && <AddFromPantryModal products={products} onClose={() => setAddFromPantryModalOpen(false)} onAdd={handleAddFromPantry} darkMode={darkMode} highContrast={highContrast} />}
             {isImportingNfce && <NFCeImportModal products={nfceProducts} onClose={() => setIsImportingNfce(false)} onConfirm={handleConfirmNfceImport} darkMode={darkMode} highContrast={highContrast} />}
+            {isPhotoFallbackModalOpen && (
+                <PhotoFallbackModal 
+                    onClose={() => setPhotoFallbackModalOpen(false)}
+                    onPhotoSelected={handleNFCePhotoScan}
+                    darkMode={darkMode}
+                    highContrast={highContrast}
+                />
+            )}
         </div>
     );
 };
@@ -1017,6 +1110,75 @@ const LinkConfirmationModal: FC<{ link: string, onConfirm: () => void, onCancel:
                     <div className="flex gap-3">
                         <button onClick={onCancel} className={`flex-1 py-3 font-bold rounded-xl border ${highContrast ? 'border-yellow-400 text-yellow-400' : 'border-gray-300 text-gray-600'}`}>Cancelar</button>
                         <button onClick={onConfirm} className={`flex-1 py-3 font-bold rounded-xl ${highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white'}`}>Acessar Link</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PhotoFallbackModal: FC<{ onClose: () => void, onPhotoSelected: (file: File) => void, darkMode?: boolean, highContrast?: boolean }> = ({ onClose, onPhotoSelected, darkMode, highContrast }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            onPhotoSelected(file);
+        }
+    };
+
+    const bgClass = highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-white' : 'bg-white text-gray-800');
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-6 animate-fade-in-down">
+            <input 
+                type="file" 
+                accept="image/*" 
+                capture="environment" 
+                ref={fileInputRef} 
+                className="hidden" 
+                onChange={handleFileChange} 
+            />
+            <div className={`w-full max-w-sm rounded-3xl shadow-2xl p-6 ${bgClass} border ${highContrast ? 'border-yellow-400' : 'border-white/10'}`}>
+                <div className="relative z-[60] flex flex-col items-center text-center gap-4">
+                    <div className="w-16 h-16 bg-yellow-500/10 border border-yellow-500/30 rounded-full flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8 text-yellow-500">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                    </div>
+
+                    <div>
+                        <h3 className="text-lg font-black tracking-wide">Bloqueio da Sefaz</h3>
+                        <p className={`text-xs mt-2 px-2 leading-relaxed ${highContrast ? 'text-yellow-200' : 'text-gray-400'}`}>
+                            Não conseguimos ler esta nota fiscal automaticamente pelo link da Secretaria da Fazenda (Sefaz), pois o portal deles bloqueou o acesso robótico do app.
+                        </p>
+                        <p className={`text-xs mt-2 font-bold ${highContrast ? 'text-yellow-400' : 'text-emerald-500'}`}>
+                            Solução Inteligente: Tire uma foto nítida e de perto da nota impressa para extrair os produtos usando nossa Inteligência Artificial!
+                        </p>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2 w-full mt-2">
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            className={`w-full py-3.5 font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-sm ${
+                                highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-500 text-black font-extrabold hover:bg-emerald-400'
+                            }`}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                            </svg>
+                            Tirar Foto da Nota
+                        </button>
+
+                        <button 
+                            onClick={onClose} 
+                            className={`w-full py-3.5 font-bold rounded-2xl border transition-all text-sm ${
+                                highContrast ? 'border-yellow-400 text-yellow-400' : 'border-zinc-700 text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            Ver Link Manualmente
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2558,13 +2720,20 @@ const NFCeImportModal: FC<{ products: NFCeProduct[], onClose: () => void, onConf
     );
 };
 
-const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode' | 'qrcode' | 'nfce') => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, scannedHistory, onClearHistory, darkMode, highContrast }) => (
+const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode' | 'qrcode' | 'nfce') => void, onPhotoScan: () => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, onPhotoScan, scannedHistory, onClearHistory, darkMode, highContrast }) => (
     <ScreenWrapper darkMode={darkMode} highContrast={highContrast}>
         <PageHeader title="Leitor QR/Código" onBack={() => onNavigate('dashboard')} darkMode={darkMode} highContrast={highContrast} />
         <div className="p-4 space-y-4">
              <button onClick={() => onOpenScanner('barcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><BarcodeIcon className="w-6 h-6"/> Ler Código de Barras</button>
              <button onClick={() => onOpenScanner('qrcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ScannerIcon className="w-6 h-6"/> Ler QR Code</button>
              <button onClick={() => onOpenScanner('nfce')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ReceiptIcon className="w-6 h-6"/> Escanear Nota Fiscal (NFC-e)</button>
+             <button onClick={onPhotoScan} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                 </svg>
+                 Escanear Foto de Nota (IA)
+             </button>
         </div>
         <div className="px-4 pt-2 flex justify-between items-center"><h2 className={`font-bold ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-gray-400' : 'text-gray-600')}`}>Últimos Escaneados</h2>{scannedHistory.length > 0 && <button onClick={onClearHistory} className={`text-xs font-bold ${highContrast ? 'text-yellow-400' : 'text-red-500'}`}>Limpar</button>}</div>
         <div className="flex-grow overflow-y-auto p-4 space-y-3">
