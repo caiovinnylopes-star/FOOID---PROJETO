@@ -9,6 +9,20 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#FFFBEB">
     <style>
+      /* Mobile viewport responsive fix */
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        overflow: hidden;
+        position: fixed;
+      }
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      
       /* Custom animation for the scanner line */
       @keyframes scan-line-anim {
         0% {

@@ -1030,7 +1030,7 @@ Não dê explicações ou textos fora do JSON.`;
     }
 
     return (
-        <div className={`h-screen w-screen font-sans overflow-hidden select-none 
+        <div className={`h-[100dvh] w-screen font-sans overflow-hidden select-none 
             ${highContrast ? 'bg-black text-yellow-400' : (darkMode ? 'bg-zinc-900 text-white' : 'bg-gray-50 text-gray-800')}`}>
             
             <Sidebar 
