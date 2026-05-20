@@ -870,6 +870,77 @@ Retorne apenas JSON puro`;
         }
     };
 
+    const handleNFCeTextImport = async (text: string) => {
+        setIsFetchingScannedProduct(true);
+        setPhotoFallbackModalOpen(false);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const prompt = `Você é um sistema especialista em extração de dados de textos de notas fiscais brasileiras (NFC-e), com foco em supermercados.
+Abaixo está o texto extraído da página da nota fiscal:
+---
+${text.substring(0, 45000)}
+---
+Extraia TODOS os produtos da nota.
+Para cada produto, retornar:
+nome_original (exatamente como está na nota)
+nome_padronizado (nome simplificado, ex: "Arroz", "Leite", "Coca-Cola")
+quantidade (número)
+unidade (UN, KG, LT, etc)
+categoria (ex: Grãos, Bebidas, Laticínios, Limpeza, Hortifruti, Carnes, etc)
+Ignorar informações irrelevantes como:
+dados do mercado
+valores totais
+impostos
+Corrigir possíveis variações de escrita:
+Ex:
+"ARROZ TIO JOAO 5KG" → "Arroz"
+"LEITE ITALAC INTEGRAL 1L" → "Leite Integral"
+Retornar SOMENTE um JSON válido no formato:
+{
+"produtos": [
+{
+"nome_original": "...",
+"nome_padronizado": "...",
+"quantidade": 1,
+"unidade": "UN",
+"categoria": "..."
+}
+]
+}
+Caso não encontre produtos, retornar:
+{
+"produtos": []
+}
+IMPORTANTE:
+Não explique nada
+Não escreva texto fora do JSON
+Retorne apenas JSON puro`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            if (response.text) {
+                const data = JSON.parse(response.text);
+                if (data.produtos && data.produtos.length > 0) {
+                    setNfceProducts(data.produtos);
+                    setIsImportingNfce(true);
+                } else {
+                    alert("Nenhum produto foi encontrado no texto colado.");
+                }
+            }
+        } catch (error) {
+            console.error("Erro ao importar texto da NFC-e:", error);
+            alert("Não foi possível processar o texto da nota fiscal. Verifique se o texto está no formato correto ou tente novamente.");
+        } finally {
+            setIsFetchingScannedProduct(false);
+        }
+    };
+
     const handleNFCePhotoScan = async (file: File) => {
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
@@ -1090,6 +1161,8 @@ Não dê explicações ou textos fora do JSON.`;
                 <PhotoFallbackModal 
                     onClose={() => setPhotoFallbackModalOpen(false)}
                     onPhotoSelected={handleNFCePhotoScan}
+                    onTextImport={handleNFCeTextImport}
+                    scannedLink={scannedLink}
                     darkMode={darkMode}
                     highContrast={highContrast}
                 />
@@ -1119,8 +1192,19 @@ const LinkConfirmationModal: FC<{ link: string, onConfirm: () => void, onCancel:
     );
 };
 
-const PhotoFallbackModal: FC<{ onClose: () => void, onPhotoSelected: (file: File) => void, darkMode?: boolean, highContrast?: boolean }> = ({ onClose, onPhotoSelected, darkMode, highContrast }) => {
+interface PhotoFallbackModalProps {
+    onClose: () => void;
+    onPhotoSelected: (file: File) => void;
+    onTextImport: (text: string) => void;
+    scannedLink?: string | null;
+    darkMode?: boolean;
+    highContrast?: boolean;
+}
+
+const PhotoFallbackModal: FC<PhotoFallbackModalProps> = ({ onClose, onPhotoSelected, onTextImport, scannedLink, darkMode, highContrast }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [pastedText, setPastedText] = useState('');
+    const [activeTab, setActiveTab] = useState<'text' | 'photo'>('text');
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -1129,10 +1213,33 @@ const PhotoFallbackModal: FC<{ onClose: () => void, onPhotoSelected: (file: File
         }
     };
 
-    const bgClass = highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-white' : 'bg-white text-gray-800');
+    const handleTextSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (pastedText.trim().length > 0) {
+            onTextImport(pastedText.trim());
+        } else {
+            alert('Por favor, cole o texto da nota fiscal.');
+        }
+    };
+
+    const bgClass = highContrast 
+        ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
+        : (darkMode ? 'bg-zinc-900 text-white' : 'bg-white text-gray-800');
+
+    const inputBgClass = highContrast
+        ? 'bg-black border-yellow-400 text-yellow-400'
+        : (darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900');
+
+    const textClass = highContrast
+        ? 'text-yellow-200'
+        : (darkMode ? 'text-zinc-400' : 'text-gray-500');
+
+    const headingClass = highContrast
+        ? 'text-yellow-400'
+        : (darkMode ? 'text-white' : 'text-zinc-900');
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-6 animate-fade-in-down">
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4 animate-fade-in-down overflow-y-auto">
             <input 
                 type="file" 
                 accept="image/*" 
@@ -1141,47 +1248,139 @@ const PhotoFallbackModal: FC<{ onClose: () => void, onPhotoSelected: (file: File
                 className="hidden" 
                 onChange={handleFileChange} 
             />
-            <div className={`w-full max-w-sm rounded-3xl shadow-2xl p-6 ${bgClass} border ${highContrast ? 'border-yellow-400' : 'border-white/10'}`}>
-                <div className="relative z-[60] flex flex-col items-center text-center gap-4">
-                    <div className="w-16 h-16 bg-yellow-500/10 border border-yellow-500/30 rounded-full flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8 text-yellow-500">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                        </svg>
-                    </div>
+            <div className={`w-full max-w-md rounded-3xl shadow-2xl p-6 ${bgClass} border ${highContrast ? 'border-yellow-400' : 'border-white/10'} max-h-[90vh] flex flex-col`}>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className={`text-lg font-black tracking-wide ${headingClass}`}>
+                        Importar Nota com IA
+                    </h3>
+                    <button 
+                        onClick={onClose} 
+                        className={`text-2xl font-bold p-1 rounded-full ${highContrast ? 'text-yellow-400 hover:text-yellow-200' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        &times;
+                    </button>
+                </div>
 
-                    <div>
-                        <h3 className="text-lg font-black tracking-wide">Bloqueio da Sefaz</h3>
-                        <p className={`text-xs mt-2 px-2 leading-relaxed ${highContrast ? 'text-yellow-200' : 'text-gray-400'}`}>
-                            Não conseguimos ler esta nota fiscal automaticamente pelo link da Secretaria da Fazenda (Sefaz), pois o portal deles bloqueou o acesso robótico do app.
-                        </p>
-                        <p className={`text-xs mt-2 font-bold ${highContrast ? 'text-yellow-400' : 'text-emerald-500'}`}>
-                            Solução Inteligente: Tire uma foto nítida e de perto da nota impressa para extrair os produtos usando nossa Inteligência Artificial!
-                        </p>
-                    </div>
-                    
-                    <div className="flex flex-col gap-2 w-full mt-2">
-                        <button 
-                            onClick={() => fileInputRef.current?.click()} 
-                            className={`w-full py-3.5 font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-sm ${
-                                highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-500 text-black font-extrabold hover:bg-emerald-400'
-                            }`}
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-                            </svg>
-                            Tirar Foto da Nota
-                        </button>
+                {/* Tabs */}
+                <div className="flex border-b border-white/10 mb-4">
+                    <button 
+                        onClick={() => setActiveTab('text')}
+                        className={`flex-1 pb-3 text-sm font-extrabold transition-all border-b-2 ${
+                            activeTab === 'text'
+                                ? (highContrast ? 'border-yellow-400 text-yellow-400' : 'border-emerald-500 text-emerald-400')
+                                : 'border-transparent text-gray-500 hover:text-gray-300'
+                        }`}
+                    >
+                        📝 Colar Texto (Bypass)
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('photo')}
+                        className={`flex-1 pb-3 text-sm font-extrabold transition-all border-b-2 ${
+                            activeTab === 'photo'
+                                ? (highContrast ? 'border-yellow-400 text-yellow-400' : 'border-emerald-500 text-emerald-400')
+                                : 'border-transparent text-gray-500 hover:text-gray-300'
+                        }`}
+                    >
+                        📸 Tirar Foto
+                    </button>
+                </div>
 
-                        <button 
-                            onClick={onClose} 
-                            className={`w-full py-3.5 font-bold rounded-2xl border transition-all text-sm ${
-                                highContrast ? 'border-yellow-400 text-yellow-400' : 'border-zinc-700 text-gray-400 hover:text-white hover:bg-white/5'
-                            }`}
-                        >
-                            Ver Link Manualmente
-                        </button>
-                    </div>
+                <div className="flex-grow overflow-y-auto pr-1 space-y-4">
+                    {activeTab === 'text' ? (
+                        <form onSubmit={handleTextSubmit} className="space-y-4">
+                            <div className={`p-4 rounded-2xl ${highContrast ? 'bg-yellow-950/20 border border-yellow-400' : (darkMode ? 'bg-zinc-800/50' : 'bg-gray-50')} text-left space-y-2`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider ${highContrast ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                                    Como burlar o bloqueio da Sefaz:
+                                </h4>
+                                <ol className={`text-xs space-y-1 list-decimal list-inside leading-relaxed ${textClass}`}>
+                                    {scannedLink && (
+                                        <li>
+                                            Clique em <strong>"Abrir Nota"</strong> abaixo para abrir o site da Sefaz no seu navegador nativo (onde ela funciona sem bloqueio).
+                                        </li>
+                                    )}
+                                    <li>No navegador, selecione todo o texto da página (<strong>Selecionar Tudo</strong>).</li>
+                                    <li>Copie e cole na caixa abaixo. A Inteligência Artificial irá encontrar todos os produtos para você!</li>
+                                </ol>
+                                
+                                {scannedLink && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => window.open(scannedLink, '_blank')}
+                                        className={`w-full mt-3 py-2.5 font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-xs shadow-md border ${
+                                            highContrast 
+                                                ? 'bg-black border-yellow-400 text-yellow-400' 
+                                                : (darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border-zinc-700' : 'bg-white hover:bg-gray-100 text-emerald-600 border-gray-200')
+                                        }`}
+                                    >
+                                        🌐 Abrir Nota no Navegador
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="space-y-1.5 text-left">
+                                <label className={`text-[10px] font-black uppercase tracking-wider ${textClass}`}>
+                                    Conteúdo da Página da Nota Fiscal
+                                </label>
+                                <textarea
+                                    value={pastedText}
+                                    onChange={(e) => setPastedText(e.target.value)}
+                                    placeholder="Cole aqui todo o texto copiado da página da nota fiscal (pode conter códigos, tabelas, etc)..."
+                                    className={`w-full h-36 px-4 py-3 rounded-2xl text-xs font-sans border focus:outline-none focus:ring-1 ${
+                                        highContrast 
+                                            ? 'focus:ring-yellow-400 focus:border-yellow-400' 
+                                            : 'focus:ring-emerald-500 focus:border-emerald-500'
+                                    } ${inputBgClass} resize-none`}
+                                />
+                            </div>
+
+                            <button 
+                                type="submit"
+                                disabled={pastedText.trim().length === 0}
+                                className={`w-full py-3.5 font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-sm uppercase tracking-wider ${
+                                    pastedText.trim().length === 0
+                                        ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700 shadow-none'
+                                        : (highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-500 text-black font-extrabold hover:bg-emerald-400')
+                                }`}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l8.982-11.795m-8.168 6.7L15 9.75M9.813 15.904L5.223 10.9m13.759-1.15l-4.59-4.82m0 0L9 9.75M14.393 4.93L9 9.75" />
+                                </svg>
+                                Importar com IA (Gemini)
+                            </button>
+                        </form>
+                    ) : (
+                        <div className="space-y-4 py-2">
+                            <div className={`p-4 rounded-2xl ${highContrast ? 'bg-yellow-950/20 border border-yellow-400' : (darkMode ? 'bg-zinc-800/50' : 'bg-gray-50')} text-center`}>
+                                <p className={`text-xs leading-relaxed ${textClass}`}>
+                                    Se você tiver a nota impressa em mãos, pode tirar uma foto bem nítida e de perto dela para nossa IA cadastrar todos os produtos automaticamente.
+                                </p>
+                            </div>
+
+                            <button 
+                                onClick={() => fileInputRef.current?.click()} 
+                                className={`w-full py-3.5 font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-sm uppercase tracking-wider ${
+                                    highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-500 text-black hover:bg-emerald-400'
+                                }`}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                                </svg>
+                                Tirar Foto da Nota
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/5 flex gap-2">
+                    <button 
+                        onClick={onClose} 
+                        className={`w-full py-3 font-bold rounded-2xl border transition-all text-xs uppercase tracking-wider ${
+                            highContrast ? 'border-yellow-400 text-yellow-400' : 'border-zinc-700 text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                        Fechar
+                    </button>
                 </div>
             </div>
         </div>

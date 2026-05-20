@@ -130,14 +130,10 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                             const zoomCap = (capabilities as any).zoom;
                             setZoomSupported(true);
                             setZoomMinMax({ min: zoomCap.min || 1, max: zoomCap.max || 5 });
-                            // Inicia com um leve zoom de 1.8x para melhorar detecção de NFC-e densas
-                            const startZoom = Math.min(zoomCap.max || 5, Math.max(zoomCap.min || 1, 1.8));
+                            // Inicia no zoom padrão (1.0x ou o mínimo suportado) para que o hardware do celular use o foco automático nativo ideal.
+                            // IMPORTANTE: NÃO aplicamos applyConstraints no startup para evitar travar ou desativar o mecanismo nativo de foco automático.
+                            const startZoom = zoomCap.min || 1;
                             setCurrentZoom(startZoom);
-                            try {
-                                await track.applyConstraints({ advanced: [{ zoom: startZoom }] } as any);
-                            } catch (e) {
-                                console.warn("Failed to apply initial zoom:", e);
-                            }
                         }
                     }
                 }
