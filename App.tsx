@@ -1030,8 +1030,10 @@ Não dê explicações ou textos fora do JSON.`;
     }
 
     return (
-        <div className={`h-[100dvh] w-screen font-sans overflow-hidden select-none 
-            ${highContrast ? 'bg-black text-yellow-400' : (darkMode ? 'bg-zinc-900 text-white' : 'bg-gray-50 text-gray-800')}`}>
+        <div 
+            style={{ height: '100dvh', maxHeight: '100dvh' }}
+            className={`w-screen font-sans overflow-hidden select-none 
+                ${highContrast ? 'bg-black text-yellow-400' : (darkMode ? 'bg-zinc-900 text-white' : 'bg-gray-50 text-gray-800')}`}>
             
             <Sidebar 
                 isOpen={isSidebarOpen} 
@@ -2200,7 +2202,9 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
 };
 
 const ScreenWrapper: FC<{children: React.ReactNode, className?: string, darkMode?: boolean, highContrast?: boolean}> = ({ children, className, darkMode, highContrast }) => (
-    <div className={`w-full h-full flex flex-col ${highContrast ? 'bg-black text-yellow-400' : (darkMode ? 'bg-zinc-900 text-white' : 'bg-gradient-to-b from-yellow-100 to-red-200 text-gray-800')} ${className}`}>
+    <div 
+        style={{ height: '100dvh', maxHeight: '100dvh' }}
+        className={`w-full flex flex-col overflow-hidden relative ${highContrast ? 'bg-black text-yellow-400' : (darkMode ? 'bg-zinc-900 text-white' : 'bg-gradient-to-b from-yellow-100 to-red-200 text-gray-800')} ${className}`}>
         {children}
     </div>
 );
@@ -2629,7 +2633,7 @@ const DashboardScreen: FC<{onNavigate: (s: Screen) => void, onLogout: () => void
                     </div>
                 );
             })()}
-            <div className="flex-grow flex flex-col justify-center items-center text-center p-6">
+            <div className="flex-grow flex flex-col justify-center items-center text-center p-6 min-h-0 overflow-y-auto">
                 <h2 className={`text-2xl ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-gray-200' : 'text-gray-700')}`}>Bem-vindo ao seu gerenciador de despensa!</h2>
                 <p className={`${highContrast ? 'text-yellow-200' : (darkMode ? 'text-gray-500' : 'text-gray-500')} mt-2`}>Organize seus alimentos e evite desperdícios.</p>
             </div>
@@ -2934,7 +2938,7 @@ const EditProfileScreen: FC<{user: User | null, onUpdateUser: (u: User) => void,
     return (
         <ScreenWrapper darkMode={darkMode} highContrast={highContrast}>
             <PageHeader title="Editar Perfil" onBack={() => onNavigate('dashboard')} darkMode={darkMode} highContrast={highContrast} />
-            <div className="p-6">
+            <div className="p-6 flex-grow overflow-y-auto">
                 <div className="flex justify-center mb-8"><div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-md ${highContrast ? 'bg-yellow-400 text-black' : 'bg-red-100 text-red-500'}`}>👤</div></div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div><label className={`text-sm font-bold ml-1 ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-gray-300' : 'text-gray-600')}`}>Nome</label><input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} /></div>
