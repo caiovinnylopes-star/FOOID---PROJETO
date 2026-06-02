@@ -3057,48 +3057,82 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
     const filteredRecipes = filter === 'all' ? recipes : recipes.filter(r => r.category === filter);
 
     const handleGenerateRecipe = async () => {
+        if (pantryProducts.length === 0) {
+            alert("Sua despensa está vazia! Adicione alguns produtos ou ingredientes primeiro para que o Chef IA possa criar receitas personalizadas.");
+            return;
+        }
+
         setIsGenerating(true);
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const ingredientList = pantryProducts.map(p => p.name).join(', ');
             
-            const prompt = `Act as a master chef. Create 3 creative recipes based PRIMARILY on these ingredients: ${ingredientList}.
-            You can assume basic pantry staples (salt, oil, etc).
-            Return a JSON array of 3 objects with this EXACT structure:
-            {
-                "title": "Recipe Name",
-                "subtitle": "Short catchy description",
-                "prepTime": "XX min",
-                "difficulty": "Fácil" | "Médio" | "Difícil",
-                "ingredients": ["ing1", "ing2", ...],
-                "instructions": ["Step 1", "Step 2", ...],
-                "category": "quick" | "healthy" | "all"
-            }
-            Do NOT include markdown formatting.`;
+            const prompt = `Você é um Master Chef renomado. Crie 3 receitas criativas e saborosas baseadas PRINCIPALMENTE nos seguintes ingredientes da despensa do usuário: ${ingredientList}.
+Você pode assumir que o usuário possui ingredientes básicos de despensa (sal, água, óleo, etc.).
 
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 3 objetos com a seguinte estrutura:
+[
+  {
+    "title": "Nome da receita (em português)",
+    "subtitle": "Breve descrição chamativa (em português)",
+    "prepTime": "Tempo de preparo, ex: 25 min",
+    "difficulty": "Fácil" ou "Médio" ou "Difícil",
+    "ingredients": ["ingrediente 1", "ingrediente 2", ...],
+    "instructions": ["Passo 1 do preparo", "Passo 2 do preparo", ...],
+    "category": "quick" ou "healthy" ou "all"
+  }
+]
+
+IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de código markdown.`;
+
+            const response = await ai.models.generateContent({ 
+                model: 'gemini-2.5-flash', 
+                contents: prompt, 
+                config: { 
+                    responseMimeType: "application/json" 
+                } 
+            });
             
             if (response.text) {
-                const newRecipesRaw = JSON.parse(response.text);
+                let cleanedText = response.text.trim();
+                // Se por acaso vier com formatação markdown
+                if (cleanedText.startsWith('```')) {
+                    cleanedText = cleanedText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+                }
                 
+                const parsed = JSON.parse(cleanedText);
+                const newRecipesRaw = Array.isArray(parsed) ? parsed : (parsed.recipes || parsed.receitas || []);
+                
+                if (newRecipesRaw.length === 0) {
+                    throw new Error("Nenhuma receita pôde ser extraída do JSON da IA.");
+                }
+
                 const newRecipes = await Promise.all(newRecipesRaw.map(async (r: any, index: number) => {
                     // Generate AI Image for the recipe
                     const imagePrompt = encodeURIComponent(`${r.title} food photography delicious high resolution`);
                     const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=600&nologo=true`;
                     
                     return {
-                        id: Date.now() + index,
-                        ...r,
+                        id: Date.now() + index + Math.floor(Math.random() * 1000),
+                        title: r.title || 'Receita Personalizada',
+                        subtitle: r.subtitle || 'Criada com seus ingredientes',
+                        prepTime: r.prepTime || '20 min',
+                        difficulty: r.difficulty || 'Fácil',
+                        ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
+                        instructions: Array.isArray(r.instructions) ? r.instructions : [],
+                        category: r.category || 'all',
                         image: imageUrl
                     };
                 }));
 
                 setRecipes(prev => [...newRecipes, ...prev]);
                 alert("✨ 3 Novas receitas criadas pelo Chef IA!");
+            } else {
+                throw new Error("Resposta da IA vazia.");
             }
         } catch (e) {
-            console.error(e);
-            alert("Erro ao gerar receitas. Tente novamente.");
+            console.error("Erro ao gerar receitas:", e);
+            alert("Erro ao gerar receitas. Certifique-se de que sua chave de API do Gemini é válida ou tente novamente mais tarde.");
         } finally {
             setIsGenerating(false);
         }
