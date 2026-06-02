@@ -18,6 +18,8 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:
