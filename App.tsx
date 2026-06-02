@@ -1021,35 +1021,47 @@ Não dê explicações ou textos fora do JSON.`;
         }
     };
 
-    const handleConfirmNfceImport = (selectedProducts: NFCeProduct[]) => {
-        const newProducts: Product[] = selectedProducts.map(p => {
-            // Map categories
-            let cat: CategoryKey = 'others';
-            const c = p.categoria.toLowerCase();
-            if (c.includes('grão') || c.includes('pão') || c.includes('massa')) cat = 'grains';
-            else if (c.includes('bebida') || c.includes('suco') || c.includes('refrigerante')) cat = 'beverages';
-            else if (c.includes('laticínio') || c.includes('leite') || c.includes('queijo')) cat = 'dairy';
-            else if (c.includes('limpeza')) cat = 'cleaning';
-            else if (c.includes('hortifruti') || c.includes('fruta') || c.includes('vegetal') || c.includes('legume')) cat = 'vegetables';
-            else if (c.includes('carne') || c.includes('frango') || c.includes('peixe')) cat = 'meats';
-            else if (c.includes('higiene')) cat = 'hygiene';
+    const handleConfirmNfceImport = async (selectedProducts: NFCeProduct[]) => {
+        if (!auth.currentUser) return;
+        try {
+            const batch = writeBatch(db);
+            const uid = auth.currentUser.uid;
 
-            return {
-                id: Date.now() + Math.random(),
-                name: p.nome_padronizado,
-                category: cat,
-                quantity: `${p.quantidade} ${p.unidade}`,
-                unit: p.quantidade,
-                expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Default 30 days
-                storage: 'pantry',
-                notes: `Importado de NFC-e: ${p.nome_original}`
-            };
-        });
+            selectedProducts.forEach(p => {
+                // Map categories
+                let cat: CategoryKey = 'others';
+                const c = p.categoria.toLowerCase();
+                if (c.includes('grão') || c.includes('pão') || c.includes('massa')) cat = 'grains';
+                else if (c.includes('bebida') || c.includes('suco') || c.includes('refrigerante')) cat = 'beverages';
+                else if (c.includes('laticínio') || c.includes('leite') || c.includes('queijo')) cat = 'dairy';
+                else if (c.includes('limpeza')) cat = 'cleaning';
+                else if (c.includes('hortifruti') || c.includes('fruta') || c.includes('vegetal') || c.includes('legume')) cat = 'vegetables';
+                else if (c.includes('carne') || c.includes('frango') || c.includes('peixe')) cat = 'meats';
+                else if (c.includes('higiene')) cat = 'hygiene';
 
-        setProducts(prev => [...prev, ...newProducts]);
-        setIsImportingNfce(false);
-        setNfceProducts([]);
-        alert(`${newProducts.length} produtos importados com sucesso!`);
+                const newId = String(Date.now() + Math.random());
+                const ref = doc(db, `users/${uid}/products`, newId);
+                
+                batch.set(ref, {
+                    id: newId,
+                    name: p.nome_padronizado,
+                    category: cat,
+                    quantity: `${p.quantidade} ${p.unidade}`,
+                    unit: p.quantidade,
+                    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Default 30 days
+                    storage: 'pantry',
+                    notes: `Importado de NFC-e: ${p.nome_original}`
+                });
+            });
+
+            await batch.commit();
+            setIsImportingNfce(false);
+            setNfceProducts([]);
+            alert(`${selectedProducts.length} produtos importados com sucesso!`);
+        } catch (e) {
+            console.error("Erro ao importar produtos NFC-e no Firestore:", e);
+            alert("Erro ao salvar os produtos no banco de dados. Tente novamente.");
+        }
     };
 
     const navigate = useCallback((s: Screen) => setScreen(s), []);
