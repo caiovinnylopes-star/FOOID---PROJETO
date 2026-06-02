@@ -284,41 +284,7 @@ const App: React.FC = () => {
         });
     };
 
-    // --- FIRESTORE LISTENERS ---
-    useEffect(() => {
-        if (!user || !auth.currentUser) {
-            setProducts([]);
-            setShoppingList([]);
-            setScannedHistory([]);
-            return;
-        }
-
-        const uid = auth.currentUser.uid;
-        
-        const unsubProducts = onSnapshot(collection(db, `users/${uid}/products`), (snapshot) => {
-            const data: Product[] = [];
-            snapshot.forEach(d => data.push(d.data() as Product));
-            setProducts(data);
-        });
-
-        const unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
-            const data: ShoppingItem[] = [];
-            snapshot.forEach(d => data.push(d.data() as ShoppingItem));
-            setShoppingList(data);
-        });
-
-        const unsubHistory = onSnapshot(collection(db, `users/${uid}/scannedHistory`), (snapshot) => {
-            const data: ScannedItem[] = [];
-            snapshot.forEach(d => data.push(d.data() as ScannedItem));
-            setScannedHistory(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-        });
-
-        return () => {
-            unsubProducts();
-            unsubShopping();
-            unsubHistory();
-        };
-    }, [user]);
+    // --- FIRESTORE LISTENERS REMOVED (MERGED WITH AUTH LISTENER FOR RELIABILITY) ---
 
     // --- FONT SIZE EFFECT ---
     useEffect(() => {
@@ -422,8 +388,12 @@ const App: React.FC = () => {
         generateNotifications();
     }, [products, readNotificationIds, settings.notifications]);
 
-    // --- FIREBASE AUTH LISTENER ---
+    // --- FIREBASE AUTH & FIRESTORE LISTENERS ---
     useEffect(() => {
+        let unsubProducts: (() => void) | null = null;
+        let unsubShopping: (() => void) | null = null;
+        let unsubHistory: (() => void) | null = null;
+
         getRedirectResult(auth).then((result) => {
             if (result) {
                 updatePassword(result.user, "123456").catch(console.error);
@@ -434,21 +404,70 @@ const App: React.FC = () => {
             }
         }).catch((error) => {
             console.error("Redirect error:", error);
-            // alert(`Erro no redirecionamento do Google: ${error.message} (${error.code})`);
         });
 
         const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            // Clean up any existing listeners to prevent leaks / double registration
+            if (unsubProducts) { unsubProducts(); unsubProducts = null; }
+            if (unsubShopping) { unsubShopping(); unsubShopping = null; }
+            if (unsubHistory) { unsubHistory(); unsubHistory = null; }
+
             if (firebaseUser) {
+                const uid = firebaseUser.uid;
+
                 // Set initial user info instantly to avoid UI delay
                 setUser({
                     name: firebaseUser.displayName || 'Usuário',
                     email: firebaseUser.email || ''
                 });
 
+                // Set up live Firestore collection listeners
+                unsubProducts = onSnapshot(collection(db, `users/${uid}/products`), (snapshot) => {
+                    const data: Product[] = [];
+                    snapshot.forEach(d => {
+                        const docData = d.data();
+                        data.push({
+                            ...docData,
+                            id: docData.id || d.id
+                        } as Product);
+                    });
+                    setProducts(data);
+                }, (error) => {
+                    console.error("Firestore products listener error:", error);
+                });
+
+                unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
+                    const data: ShoppingItem[] = [];
+                    snapshot.forEach(d => {
+                        const docData = d.data();
+                        data.push({
+                            ...docData,
+                            id: docData.id || d.id
+                        } as ShoppingItem);
+                    });
+                    setShoppingList(data);
+                }, (error) => {
+                    console.error("Firestore shoppingList listener error:", error);
+                });
+
+                unsubHistory = onSnapshot(collection(db, `users/${uid}/scannedHistory`), (snapshot) => {
+                    const data: ScannedItem[] = [];
+                    snapshot.forEach(d => {
+                        const docData = d.data();
+                        data.push({
+                            ...docData,
+                            id: docData.id || d.id
+                        } as ScannedItem);
+                    });
+                    setScannedHistory(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+                }, (error) => {
+                    console.error("Firestore scannedHistory listener error:", error);
+                });
+
                 // Fetch full profile from Firestore in the background
                 (async () => {
                     try {
-                        const userDocRef = doc(db, 'users', firebaseUser.uid);
+                        const userDocRef = doc(db, 'users', uid);
                         const userDoc = await getDoc(userDocRef);
                         if (userDoc.exists()) {
                             const userData = userDoc.data();
@@ -472,6 +491,9 @@ const App: React.FC = () => {
                 });
             } else {
                 setUser(null);
+                setProducts([]);
+                setShoppingList([]);
+                setScannedHistory([]);
                 setScreen(prev => {
                     if (['dashboard', 'pantry', 'shoppingList', 'recipes', 'settings', 'editProfile'].includes(prev)) {
                         return 'welcome';
@@ -482,7 +504,12 @@ const App: React.FC = () => {
             setIsLoadingAuth(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            if (unsubProducts) unsubProducts();
+            if (unsubShopping) unsubShopping();
+            if (unsubHistory) unsubHistory();
+        };
     }, []);
 
     useEffect(() => {
@@ -1497,7 +1524,14 @@ const RecipeModal: FC<{ recipe: any, onClose: () => void, darkMode?: boolean, hi
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 animate-fade-in-down backdrop-blur-sm">
             <div className={`w-full max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl p-0 overflow-hidden h-[90vh] flex flex-col ${containerClass}`}>
                 <div className="relative h-64 w-full flex-shrink-0">
-                    <img src={recipe.image || 'https://placehold.co/600x400?text=Recipe'} alt={recipe.title} className="w-full h-full object-cover" />
+                    <img 
+                        src={recipe.image || 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=800&auto=format&fit=crop&q=60'} 
+                        alt={recipe.title} 
+                        className="w-full h-full object-cover" 
+                        onError={(e) => {
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=800&auto=format&fit=crop&q=60';
+                        }}
+                    />
                     <button onClick={onClose} className="absolute top-4 right-4 bg-black/40 p-2 rounded-full text-white hover:bg-black/60 z-20 backdrop-blur-md"><CloseIcon className="w-6 h-6"/></button>
                     <div className={`absolute bottom-0 left-0 right-0 p-6 pt-12 ${headerClass}`}>
                         <h2 className="text-3xl font-bold leading-tight shadow-black drop-shadow-md">{recipe.title}</h2>
@@ -3085,18 +3119,54 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
                 </button>
             </div>
             <div className="flex gap-2 px-4 pb-4 overflow-x-auto scrollbar-hide"><button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'all' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Todas</button><button onClick={() => setFilter('quick')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'quick' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Rápidas</button><button onClick={() => setFilter('healthy')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'healthy' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Saudáveis</button></div>
-            <div className="flex-grow overflow-y-auto p-4 pt-0 space-y-4">
-                {filteredRecipes.map(recipe => (
-                    <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className={`rounded-2xl overflow-hidden shadow-lg cursor-pointer transform transition hover:scale-[1.02] ${highContrast ? 'bg-black border-2 border-yellow-400' : (darkMode ? 'bg-zinc-800' : 'bg-white')}`}>
-                        <div className="h-40 w-full relative">
-                             <img src={recipe.image} alt={recipe.title} className="w-full h-full object-cover" />
-                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
-                                 <div><h3 className="text-white font-bold text-lg leading-tight">{recipe.title}</h3><p className="text-gray-300 text-xs">{recipe.subtitle}</p></div>
-                             </div>
-                             <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-xs font-bold text-white flex gap-2"><span>⏱ {recipe.prepTime}</span><span>🔥 {recipe.difficulty}</span></div>
+            <div className="flex-grow overflow-y-auto p-4 pt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pb-6">
+                    {filteredRecipes.map(recipe => (
+                        <div 
+                            key={recipe.id} 
+                            onClick={() => setSelectedRecipe(recipe)} 
+                            className={`rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.06)] cursor-pointer transform transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] flex flex-col h-full border ${
+                                highContrast 
+                                    ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
+                                    : (darkMode ? 'bg-zinc-800 border-zinc-700/50' : 'bg-white border-gray-100')
+                            }`}
+                        >
+                            {/* Card Image Area (Aspect 16:9) */}
+                            <div className="w-full aspect-[16/9] relative overflow-hidden bg-zinc-800">
+                                 <img 
+                                     src={recipe.image} 
+                                     alt={recipe.title} 
+                                     className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                                     onError={(e) => {
+                                         // High quality backup photo if pollinations image fails to load
+                                         e.currentTarget.src = 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=800&auto=format&fit=crop&q=60';
+                                     }}
+                                 />
+                                 {/* Difficulty and Prep time badge */}
+                                 <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-xl text-[10px] font-black text-white flex gap-2 tracking-wider uppercase">
+                                     <span>⏱ {recipe.prepTime}</span>
+                                     <span>🔥 {recipe.difficulty}</span>
+                                 </div>
+                            </div>
+                            
+                            {/* Card Details Area */}
+                            <div className="p-4 flex flex-col justify-between flex-grow">
+                                 <div>
+                                     <h3 className={`font-black text-base leading-snug mb-1.5 ${
+                                         highContrast ? 'text-yellow-400' : (darkMode ? 'text-white' : 'text-gray-900')
+                                     }`}>
+                                         {recipe.title}
+                                     </h3>
+                                     <p className={`text-xs line-clamp-2 leading-relaxed ${
+                                         highContrast ? 'text-yellow-200' : (darkMode ? 'text-zinc-400' : 'text-zinc-500')
+                                     }`}>
+                                         {recipe.subtitle}
+                                     </p>
+                                 </div>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
             <BottomNav activeScreen="recipes" onNavigate={onNavigate} darkMode={darkMode} highContrast={highContrast} />
             {selectedRecipe && <RecipeModal recipe={selectedRecipe} onClose={() => setSelectedRecipe(null)} darkMode={darkMode} highContrast={highContrast} />}
