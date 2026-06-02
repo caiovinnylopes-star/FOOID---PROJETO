@@ -120,4 +120,5 @@ export interface Settings {
     highContrast: boolean;
     reducedMotion: boolean;
   };
+  geminiApiKey?: string;
 }

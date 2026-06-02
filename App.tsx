@@ -108,6 +108,7 @@ const DEFAULT_SETTINGS: Settings = {
   appearance: { darkMode: false, fontSize: 'Normal' },
   notifications: { expiryAlerts: true, stockAlerts: true, alertDays: 15 },
   accessibility: { highContrast: false, reducedMotion: false },
+  geminiApiKey: ''
 };
 
 // --- HELPER FUNCTIONS ---
@@ -233,6 +234,15 @@ const App: React.FC = () => {
 
     const [recipes, setRecipes] = useState<Recipe[]>(MOCK_RECIPES);
     const [settings, setSettings] = usePersistentState<Settings>(FOOID_SETTINGS_KEY, DEFAULT_SETTINGS);
+
+    const getGeminiClient = useCallback(() => {
+        const key = settings.geminiApiKey?.trim() || process.env.GEMINI_API_KEY || '';
+        if (!key) {
+            alert("Aviso: Chave API do Gemini não configurada! Vá em Configurações ⚙️ e configure sua chave de API gratuita do Gemini para ativar os recursos de IA (Escanear Notas, Voz, Sugestões).");
+            throw new Error("Gemini API Key is missing");
+        }
+        return new GoogleGenAI({ apiKey: key });
+    }, [settings.geminiApiKey]);
     
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [scannerMode, setScannerMode] = useState<'barcode' | 'qrcode' | 'nfce'>('barcode');
@@ -829,7 +839,7 @@ const App: React.FC = () => {
             text = text.replace(/\s+/g, ' ').trim();
 
             // 3. Process with AI
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e), com foco em supermercados.
 Abaixo está o texto extraído da página da nota fiscal:
 ---
@@ -901,7 +911,7 @@ Retorne apenas JSON puro`;
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             const prompt = `Você é um sistema especialista em extração de dados de textos de notas fiscais brasileiras (NFC-e), com foco em supermercados.
 Abaixo está o texto extraído da página da nota fiscal:
 ---
@@ -986,7 +996,7 @@ Retorne apenas JSON puro`;
             };
 
             const base64Data = await fileToBase64(file);
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             
             const prompt = `Você é um sistema especialista em extração de dados de fotos de notas fiscais de supermercado brasileiras (NFC-e ou SAT).
 Analise a imagem da nota fiscal e extraia TODOS os produtos listados nela.
@@ -1693,7 +1703,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
 
     const processVoiceCommand = async (text: string) => {
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Analise este comando de voz para cadastro de produto: "${text}".
             Hoje é ${today}.
@@ -1735,7 +1745,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 // ----------------------------------
 
                 // Start AI Analysis (Background)
-                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                const ai = getGeminiClient();
                 const base64Data = resizedImage.split(',')[1];
                 
                 // SIMPLIFIED PROMPT - No Expiry needed as user will set manually
@@ -2019,7 +2029,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
 
     const processVoiceCommand = async (text: string) => {
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Analise este comando de voz para editar produto: "${text}".
             Hoje é ${today}.
@@ -2059,7 +2069,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 // ----------------------------------
 
                 // Smart Camera Analysis
-                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                const ai = getGeminiClient();
                 const base64Data = resizedImage.split(',')[1];
                 
                 const prompt = `Analyze this product image to identify it. Return a JSON object with:
@@ -2255,7 +2265,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
         if (!name) return alert("Preencha o nome do produto primeiro.");
         setIsSuggesting(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             
             const prompt = `Atue como um pesquisador de preços. Busque o valor atual de mercado no Brasil para o item exato: "${name}". 
             Considere "${name}" como a marca ou descrição oficial do produto.
@@ -2362,7 +2372,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
         if (!name) return alert("Preencha o nome do produto primeiro.");
         setIsSuggesting(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             
             const prompt = `Atue como um pesquisador de preços. Busque o valor atual de mercado no Brasil para o item exato: "${name}". 
             Considere "${name}" como a marca ou descrição oficial do produto.
@@ -3064,7 +3074,7 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
 
         setIsGenerating(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = getGeminiClient();
             const ingredientList = pantryProducts.map(p => p.name).join(', ');
             
             const prompt = `Você é um Master Chef renomado. Crie 3 receitas criativas e saborosas baseadas PRINCIPALMENTE nos seguintes ingredientes da despensa do usuário: ${ingredientList}.
@@ -3238,6 +3248,33 @@ const SettingsScreen: FC<{settings: Settings, setSettings: React.Dispatch<React.
                 <Section title="Acessibilidade" icon="♿">
                     <Toggle label="Alto Contraste" desc="Aumenta o contraste para melhor visibilidade" value={settings.accessibility.highContrast} onChange={v => updateSetting('accessibility', 'highContrast', v)} />
                     <Toggle label="Animações Reduzidas" desc="Reduz animações para usuários sensíveis a movimento" value={settings.accessibility.reducedMotion} onChange={v => updateSetting('accessibility', 'reducedMotion', v)} />
+                </Section>
+                <Section title="Inteligência Artificial (IA)" icon="🧠">
+                    <div className="flex flex-col gap-2 py-2">
+                        <div>
+                            <p className={`font-bold text-sm ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-white' : 'text-gray-800')}`}>Chave API do Gemini</p>
+                            <p className={`text-xs mb-2 ${highContrast ? 'text-yellow-200' : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>Insira sua chave obtida no Google AI Studio para ativar o escaneamento de notas fiscais e geração de receitas.</p>
+                        </div>
+                        <input 
+                            type="password" 
+                            placeholder="Insira sua Gemini API Key..."
+                            value={settings.geminiApiKey || ''}
+                            onChange={e => setSettings(prev => ({ ...prev, geminiApiKey: e.target.value }))}
+                            className={`w-full p-2.5 rounded-lg text-xs outline-none border focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${
+                                highContrast 
+                                    ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
+                                    : (darkMode ? 'bg-zinc-700 border-zinc-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-800')
+                            }`}
+                        />
+                        <a 
+                            href="https://aistudio.google.com/" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className={`text-[10px] font-extrabold underline flex items-center gap-1 ${highContrast ? 'text-yellow-400' : 'text-purple-400 hover:text-purple-500'}`}
+                        >
+                            🔑 Obtenha sua chave de API grátis aqui no Google AI Studio
+                        </a>
+                    </div>
                 </Section>
             </div>
             <BottomNav activeScreen="settings" onNavigate={onNavigate} darkMode={darkMode} highContrast={highContrast} />
