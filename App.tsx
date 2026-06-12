@@ -882,7 +882,7 @@ Não escreva texto fora do JSON
 Retorne apenas JSON puro`;
 
             const response = await ai.models.generateContent({ 
-                model: 'gemini-3.5-flash', 
+                model: 'gemini-2.5-flash', 
                 contents: prompt, 
                 config: { 
                     responseMimeType: "application/json"
@@ -954,7 +954,7 @@ Não escreva texto fora do JSON
 Retorne apenas JSON puro`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json"
@@ -1026,7 +1026,7 @@ Caso não encontre produtos na imagem, retorne:
 Não dê explicações ou textos fora do JSON.`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: 'gemini-2.5-flash',
                 contents: [
                     {
                         inlineData: {
@@ -1716,7 +1716,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 "storage": string (one of: fridge, freezer, fruit-bowl, pantry),
                 "expiryDate": string (YYYY-MM-DD, calcular data futura baseada no texto ex: 'vence em 20 dias' ou 'vence dia 15 de maio')
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -1756,7 +1756,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
+                    model: 'gemini-2.5-flash',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -2042,7 +2042,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 "storage": string,
                 "expiryDate": string
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -2079,7 +2079,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-3.5-flash',
+                    model: 'gemini-2.5-flash',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -2273,15 +2273,24 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
             Ignore receitas, busque apenas produtos vendidos em mercados.
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    tools: [{ googleSearch: {} }],
-                },
-            });
+            let response;
+            try {
+                // Tenta com Google Search primeiro
+                response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                    config: { tools: [{ googleSearch: {} }] },
+                });
+            } catch (searchError) {
+                console.warn("Erro ao usar Google Search, tentando sem ferramenta externa:", searchError);
+                // Fallback sem Google Search (a API Key do usuário pode não suportar)
+                response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                });
+            }
 
-            if (response.text) {
+            if (response && response.text) {
                 const cleanText = response.text.replace('R$', '').trim();
                 const match = cleanText.match(/(\d+[.,]?\d*)/);
                 if (match) {
@@ -2291,9 +2300,9 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
                      setEstimatedPrice(cleanText); // Fallback
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Erro ao sugerir preço", e);
-            alert("Não foi possível pesquisar o preço no momento.");
+            alert(`Não foi possível pesquisar o preço no momento.\nDetalhe do Erro: ${e.message || String(e)}`);
         } finally {
             setIsSuggesting(false);
         }
@@ -2380,15 +2389,22 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
             Ignore receitas, busque apenas produtos vendidos em mercados.
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    tools: [{ googleSearch: {} }],
-                },
-            });
+            let response;
+            try {
+                response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                    config: { tools: [{ googleSearch: {} }] },
+                });
+            } catch (searchError) {
+                console.warn("Erro ao usar Google Search, tentando sem ferramenta externa:", searchError);
+                response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                });
+            }
 
-            if (response.text) {
+            if (response && response.text) {
                 const cleanText = response.text.replace('R$', '').trim();
                 const match = cleanText.match(/(\d+[.,]?\d*)/);
                 if (match) {
@@ -2398,9 +2414,9 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
                      setEstimatedPrice(cleanText);
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Erro ao sugerir preço", e);
-            alert("Não foi possível pesquisar o preço no momento.");
+            alert(`Não foi possível pesquisar o preço no momento.\nDetalhe do Erro: ${e.message || String(e)}`);
         } finally {
             setIsSuggesting(false);
         }
@@ -3096,7 +3112,7 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
 IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de código markdown.`;
 
             const response = await ai.models.generateContent({ 
-                model: 'gemini-3.5-flash', 
+                model: 'gemini-2.5-flash', 
                 contents: prompt, 
                 config: { 
                     responseMimeType: "application/json" 
