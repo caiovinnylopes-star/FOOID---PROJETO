@@ -839,7 +839,7 @@ const App: React.FC = () => {
             text = text.replace(/\s+/g, ' ').trim();
 
             // 3. Process with AI
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e), com foco em supermercados.
 Abaixo está o texto extraído da página da nota fiscal:
 ---
@@ -911,7 +911,7 @@ Retorne apenas JSON puro`;
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
         try {
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const prompt = `Você é um sistema especialista em extração de dados de textos de notas fiscais brasileiras (NFC-e), com foco em supermercados.
 Abaixo está o texto extraído da página da nota fiscal:
 ---
@@ -996,7 +996,7 @@ Retorne apenas JSON puro`;
             };
 
             const base64Data = await fileToBase64(file);
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             
             const prompt = `Você é um sistema especialista em extração de dados de fotos de notas fiscais de supermercado brasileiras (NFC-e ou SAT).
 Analise a imagem da nota fiscal e extraia TODOS os produtos listados nela.
@@ -1703,7 +1703,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
 
     const processVoiceCommand = async (text: string) => {
         try {
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Analise este comando de voz para cadastro de produto: "${text}".
             Hoje é ${today}.
@@ -1745,7 +1745,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 // ----------------------------------
 
                 // Start AI Analysis (Background)
-                const ai = getGeminiClient();
+                const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
                 const base64Data = resizedImage.split(',')[1];
                 
                 // SIMPLIFIED PROMPT - No Expiry needed as user will set manually
@@ -2029,7 +2029,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
 
     const processVoiceCommand = async (text: string) => {
         try {
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Analise este comando de voz para editar produto: "${text}".
             Hoje é ${today}.
@@ -2069,7 +2069,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 // ----------------------------------
 
                 // Smart Camera Analysis
-                const ai = getGeminiClient();
+                const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
                 const base64Data = resizedImage.split(',')[1];
                 
                 const prompt = `Analyze this product image to identify it. Return a JSON object with:
@@ -2265,7 +2265,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
         if (!name) return alert("Preencha o nome do produto primeiro.");
         setIsSuggesting(true);
         try {
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             
             const prompt = `Atue como um pesquisador de preços. Busque o valor atual de mercado no Brasil para o item exato: "${name}". 
             Considere "${name}" como a marca ou descrição oficial do produto.
@@ -2381,7 +2381,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
         if (!name) return alert("Preencha o nome do produto primeiro.");
         setIsSuggesting(true);
         try {
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             
             const prompt = `Atue como um pesquisador de preços. Busque o valor atual de mercado no Brasil para o item exato: "${name}". 
             Considere "${name}" como a marca ou descrição oficial do produto.
@@ -3090,7 +3090,7 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
 
         setIsGenerating(true);
         try {
-            const ai = getGeminiClient();
+            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const ingredientList = pantryProducts.map(p => p.name).join(', ');
             
             const prompt = `Você é um Master Chef renomado. Crie 3 receitas criativas e saborosas baseadas PRINCIPALMENTE nos seguintes ingredientes da despensa do usuário: ${ingredientList}.
