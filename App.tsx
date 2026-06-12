@@ -2287,9 +2287,9 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
                      setEstimatedPrice(cleanText); // Fallback
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Erro ao sugerir preço", e);
-            alert("Não foi possível pesquisar o preço no momento.");
+            alert(`Não foi possível pesquisar o preço no momento.\nDetalhes do erro: ${e.message || String(e)}`);
         } finally {
             setIsSuggesting(false);
         }
@@ -2394,9 +2394,9 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
                      setEstimatedPrice(cleanText);
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Erro ao sugerir preço", e);
-            alert("Não foi possível pesquisar o preço no momento.");
+            alert(`Não foi possível pesquisar o preço no momento.\nDetalhes do erro: ${e.message || String(e)}`);
         } finally {
             setIsSuggesting(false);
         }
