@@ -5,7 +5,7 @@ import { HomeIcon, PantryIcon, BellIcon, MenuIcon, PlusIcon, ArrowLeftIcon, Tras
 import ScannerComponent from './components/ScannerComponent';
 import QRScannerComponent from './components/QRScannerComponent';
 import { GoogleGenAI, Type } from "@google/genai";
-import { auth, db } from './firebase';
+import { auth, db, firebaseConfig } from './firebase';
 import { 
     onAuthStateChanged, 
     signInWithEmailAndPassword, 
@@ -21,40 +21,6 @@ import {
     sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, onSnapshot, writeBatch, serverTimestamp, query, orderBy } from 'firebase/firestore';
-
-// --- API KEY HELPER ---
-export const getGeminiApiKey = () => {
-    // 1. Tenta obter do local storage direta (se houver)
-    const localDirect = localStorage.getItem('FOOID_GEMINI_API_KEY');
-    if (localDirect && localDirect.trim().length > 0) return localDirect.trim();
-
-    // 2. Tenta obter do objeto de configurações (fooid_settings) no local storage
-    try {
-        const settingsStr = localStorage.getItem('fooid_settings');
-        if (settingsStr) {
-            const parsed = JSON.parse(settingsStr);
-            if (parsed && typeof parsed === 'object' && parsed.geminiApiKey) {
-                const key = parsed.geminiApiKey.trim();
-                if (key.length > 0) return key;
-            }
-        }
-    } catch (e) {
-        console.error("Erro ao ler fooid_settings", e);
-    }
-
-    // 3. Fallback para a variável de ambiente (build-time)
-    return (process.env.GEMINI_API_KEY || '');
-};
-
-export const validateGeminiApiKey = (): boolean => {
-    const key = getGeminiApiKey();
-    if (!key) {
-        alert("Chave API do Gemini não configurada!\n\nPor favor, vá em Configurações ⚙️ e configure sua chave de API gratuita do Gemini para ativar os recursos de IA (Escanear Notas, Voz, Sugestões e Receitas).");
-        return false;
-    }
-    return true;
-};
-
 
 // --- ERROR HANDLING ---
 enum OperationType {
@@ -270,13 +236,9 @@ const App: React.FC = () => {
     const [settings, setSettings] = usePersistentState<Settings>(FOOID_SETTINGS_KEY, DEFAULT_SETTINGS);
 
     const getGeminiClient = useCallback(() => {
-        const key = settings.geminiApiKey?.trim() || process.env.GEMINI_API_KEY || '';
-        if (!key) {
-            alert("Aviso: Chave API do Gemini não configurada! Vá em Configurações ⚙️ e configure sua chave de API gratuita do Gemini para ativar os recursos de IA (Escanear Notas, Voz, Sugestões).");
-            throw new Error("Gemini API Key is missing");
-        }
+        const key = process.env.GEMINI_API_KEY || firebaseConfig.apiKey || '';
         return new GoogleGenAI({ apiKey: key });
-    }, [settings.geminiApiKey]);
+    }, []);
     
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [scannerMode, setScannerMode] = useState<'barcode' | 'qrcode' | 'nfce'>('barcode');
@@ -854,7 +816,6 @@ const App: React.FC = () => {
     };
 
     const handleNFCeScan = async (url: string) => {
-        if (!validateGeminiApiKey()) return;
         setIsFetchingScannedProduct(true);
         try {
             // 1. Fetch HTML via CORS Proxy
@@ -874,7 +835,7 @@ const App: React.FC = () => {
             text = text.replace(/\s+/g, ' ').trim();
 
             // 3. Process with AI
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e), com foco em supermercados.
 Abaixo está o texto extraído da página da nota fiscal:
 ---
@@ -917,7 +878,7 @@ Não escreva texto fora do JSON
 Retorne apenas JSON puro`;
 
             const response = await ai.models.generateContent({ 
-                model: 'gemini-2.5-flash', 
+                model: 'gemini-3.5-flash', 
                 contents: prompt, 
                 config: { 
                     responseMimeType: "application/json"
@@ -943,11 +904,10 @@ Retorne apenas JSON puro`;
     };
 
     const handleNFCeTextImport = async (text: string) => {
-        if (!validateGeminiApiKey()) return;
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
         try {
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             const prompt = `Você é um sistema especialista em extração de dados de textos de notas fiscais brasileiras (NFC-e), com foco em supermercados.
 Abaixo está o texto extraído da página da nota fiscal:
 ---
@@ -990,7 +950,7 @@ Não escreva texto fora do JSON
 Retorne apenas JSON puro`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3.5-flash',
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json"
@@ -1015,7 +975,6 @@ Retorne apenas JSON puro`;
     };
 
     const handleNFCePhotoScan = async (file: File) => {
-        if (!validateGeminiApiKey()) return;
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
         try {
@@ -1033,7 +992,7 @@ Retorne apenas JSON puro`;
             };
 
             const base64Data = await fileToBase64(file);
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             
             const prompt = `Você é um sistema especialista em extração de dados de fotos de notas fiscais de supermercado brasileiras (NFC-e ou SAT).
 Analise a imagem da nota fiscal e extraia TODOS os produtos listados nela.
@@ -1063,7 +1022,7 @@ Caso não encontre produtos na imagem, retorne:
 Não dê explicações ou textos fora do JSON.`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3.5-flash',
                 contents: [
                     {
                         inlineData: {
@@ -1739,9 +1698,8 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
     };
 
     const processVoiceCommand = async (text: string) => {
-        if (!validateGeminiApiKey()) return;
         try {
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Analise este comando de voz para cadastro de produto: "${text}".
             Hoje é ${today}.
@@ -1754,7 +1712,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 "storage": string (one of: fridge, freezer, fruit-bowl, pantry),
                 "expiryDate": string (YYYY-MM-DD, calcular data futura baseada no texto ex: 'vence em 20 dias' ou 'vence dia 15 de maio')
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -1773,7 +1731,6 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            if (!validateGeminiApiKey()) return;
             setIsAnalyzingPhoto(true);
             try {
                 const resizedImage = await compressImage(e.target.files[0]);
@@ -1784,7 +1741,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 // ----------------------------------
 
                 // Start AI Analysis (Background)
-                const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+                const ai = getGeminiClient();
                 const base64Data = resizedImage.split(',')[1];
                 
                 // SIMPLIFIED PROMPT - No Expiry needed as user will set manually
@@ -1795,7 +1752,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-3.5-flash',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -2067,9 +2024,8 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
     };
 
     const processVoiceCommand = async (text: string) => {
-        if (!validateGeminiApiKey()) return;
         try {
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Analise este comando de voz para editar produto: "${text}".
             Hoje é ${today}.
@@ -2082,7 +2038,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 "storage": string,
                 "expiryDate": string
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-3.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -2099,7 +2055,6 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
     
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            if (!validateGeminiApiKey()) return;
             setIsAnalyzingPhoto(true);
             try {
                 const resizedImage = await compressImage(e.target.files[0]);
@@ -2110,7 +2065,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 // ----------------------------------
 
                 // Smart Camera Analysis
-                const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+                const ai = getGeminiClient();
                 const base64Data = resizedImage.split(',')[1];
                 
                 const prompt = `Analyze this product image to identify it. Return a JSON object with:
@@ -2120,7 +2075,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-3.5-flash',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -2304,10 +2259,9 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
 
     const handleSuggestPrice = async () => {
         if (!name) return alert("Preencha o nome do produto primeiro.");
-        if (!validateGeminiApiKey()) return;
         setIsSuggesting(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             
             const prompt = `Atue como um pesquisador de preços. Busque o valor atual de mercado no Brasil para o item exato: "${name}". 
             Considere "${name}" como a marca ou descrição oficial do produto.
@@ -2315,24 +2269,15 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
             Ignore receitas, busque apenas produtos vendidos em mercados.
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
-            let response;
-            try {
-                // Tenta com Google Search primeiro
-                response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { tools: [{ googleSearch: {} }] },
-                });
-            } catch (searchError) {
-                console.warn("Erro ao usar Google Search, tentando sem ferramenta externa:", searchError);
-                // Fallback sem Google Search (a API Key do usuário pode não suportar)
-                response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                });
-            }
+            const response = await ai.models.generateContent({
+                model: 'gemini-3.5-flash',
+                contents: prompt,
+                config: {
+                    tools: [{ googleSearch: {} }],
+                },
+            });
 
-            if (response && response.text) {
+            if (response.text) {
                 const cleanText = response.text.replace('R$', '').trim();
                 const match = cleanText.match(/(\d+[.,]?\d*)/);
                 if (match) {
@@ -2342,9 +2287,9 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
                      setEstimatedPrice(cleanText); // Fallback
                 }
             }
-        } catch (e: any) {
+        } catch (e) {
             console.error("Erro ao sugerir preço", e);
-            alert(`Não foi possível pesquisar o preço no momento.\nDetalhe do Erro: ${e.message || String(e)}`);
+            alert("Não foi possível pesquisar o preço no momento.");
         } finally {
             setIsSuggesting(false);
         }
@@ -2421,10 +2366,9 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
 
     const handleSuggestPrice = async () => {
         if (!name) return alert("Preencha o nome do produto primeiro.");
-        if (!validateGeminiApiKey()) return;
         setIsSuggesting(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             
             const prompt = `Atue como um pesquisador de preços. Busque o valor atual de mercado no Brasil para o item exato: "${name}". 
             Considere "${name}" como a marca ou descrição oficial do produto.
@@ -2432,22 +2376,15 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
             Ignore receitas, busque apenas produtos vendidos em mercados.
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
-            let response;
-            try {
-                response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                    config: { tools: [{ googleSearch: {} }] },
-                });
-            } catch (searchError) {
-                console.warn("Erro ao usar Google Search, tentando sem ferramenta externa:", searchError);
-                response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                });
-            }
+            const response = await ai.models.generateContent({
+                model: 'gemini-3.5-flash',
+                contents: prompt,
+                config: {
+                    tools: [{ googleSearch: {} }],
+                },
+            });
 
-            if (response && response.text) {
+            if (response.text) {
                 const cleanText = response.text.replace('R$', '').trim();
                 const match = cleanText.match(/(\d+[.,]?\d*)/);
                 if (match) {
@@ -2457,9 +2394,9 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
                      setEstimatedPrice(cleanText);
                 }
             }
-        } catch (e: any) {
+        } catch (e) {
             console.error("Erro ao sugerir preço", e);
-            alert(`Não foi possível pesquisar o preço no momento.\nDetalhe do Erro: ${e.message || String(e)}`);
+            alert("Não foi possível pesquisar o preço no momento.");
         } finally {
             setIsSuggesting(false);
         }
@@ -3130,11 +3067,10 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
             alert("Sua despensa está vazia! Adicione alguns produtos ou ingredientes primeiro para que o Chef IA possa criar receitas personalizadas.");
             return;
         }
-        if (!validateGeminiApiKey()) return;
 
         setIsGenerating(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+            const ai = getGeminiClient();
             const ingredientList = pantryProducts.map(p => p.name).join(', ');
             
             const prompt = `Você é um Master Chef renomado. Crie 3 receitas criativas e saborosas baseadas PRINCIPALMENTE nos seguintes ingredientes da despensa do usuário: ${ingredientList}.
@@ -3156,7 +3092,7 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
 IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de código markdown.`;
 
             const response = await ai.models.generateContent({ 
-                model: 'gemini-2.5-flash', 
+                model: 'gemini-3.5-flash', 
                 contents: prompt, 
                 config: { 
                     responseMimeType: "application/json" 
@@ -3309,37 +3245,7 @@ const SettingsScreen: FC<{settings: Settings, setSettings: React.Dispatch<React.
                     <Toggle label="Alto Contraste" desc="Aumenta o contraste para melhor visibilidade" value={settings.accessibility.highContrast} onChange={v => updateSetting('accessibility', 'highContrast', v)} />
                     <Toggle label="Animações Reduzidas" desc="Reduz animações para usuários sensíveis a movimento" value={settings.accessibility.reducedMotion} onChange={v => updateSetting('accessibility', 'reducedMotion', v)} />
                 </Section>
-                <Section title="Inteligência Artificial (IA)" icon="🧠">
-                    <div className="flex flex-col gap-2 py-2">
-                        <div>
-                            <p className={`font-bold text-sm ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-white' : 'text-gray-800')}`}>Chave API do Gemini</p>
-                            <p className={`text-xs mb-2 ${highContrast ? 'text-yellow-200' : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>Insira sua chave obtida no Google AI Studio para ativar o escaneamento de notas fiscais e geração de receitas.</p>
-                        </div>
-                        <input 
-                            type="password" 
-                            placeholder="Insira sua Gemini API Key..."
-                            value={settings.geminiApiKey || ''}
-                            onChange={e => {
-                                const val = e.target.value;
-                                setSettings(prev => ({ ...prev, geminiApiKey: val }));
-                                localStorage.setItem('FOOID_GEMINI_API_KEY', val);
-                            }}
-                            className={`w-full p-2.5 rounded-lg text-xs outline-none border focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${
-                                highContrast 
-                                    ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
-                                    : (darkMode ? 'bg-zinc-700 border-zinc-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-800')
-                            }`}
-                        />
-                        <a 
-                            href="https://aistudio.google.com/" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className={`text-[10px] font-extrabold underline flex items-center gap-1 ${highContrast ? 'text-yellow-400' : 'text-purple-400 hover:text-purple-500'}`}
-                        >
-                            🔑 Obtenha sua chave de API grátis aqui no Google AI Studio
-                        </a>
-                    </div>
-                </Section>
+
             </div>
             <BottomNav activeScreen="settings" onNavigate={onNavigate} darkMode={darkMode} highContrast={highContrast} />
         </ScreenWrapper>
