@@ -2274,7 +2274,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
                 config: {
                     tools: [{ googleSearch: {} }],
@@ -2381,7 +2381,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
                 config: {
                     tools: [{ googleSearch: {} }],
