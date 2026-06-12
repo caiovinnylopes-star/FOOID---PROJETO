@@ -22,6 +22,13 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, onSnapshot, writeBatch, serverTimestamp, query, orderBy } from 'firebase/firestore';
 
+// --- API KEY HELPER ---
+export const getGeminiApiKey = () => {
+    const local = localStorage.getItem('FOOID_GEMINI_API_KEY');
+    if (local && local.trim().length > 0) return local.trim();
+    return (process.env.GEMINI_API_KEY || '');
+};
+
 // --- ERROR HANDLING ---
 enum OperationType {
   CREATE = 'create',
