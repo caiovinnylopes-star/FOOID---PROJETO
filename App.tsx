@@ -440,6 +440,7 @@ const App: React.FC = () => {
                     setProducts(data);
                 }, (error) => {
                     console.error("Firestore products listener error:", error);
+                    alert("Erro ao sincronizar despensa (Firestore): " + error.message);
                 });
 
                 unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
@@ -454,6 +455,7 @@ const App: React.FC = () => {
                     setShoppingList(data);
                 }, (error) => {
                     console.error("Firestore shoppingList listener error:", error);
+                    alert("Erro ao sincronizar lista de compras (Firestore): " + error.message);
                 });
 
                 unsubHistory = onSnapshot(collection(db, `users/${uid}/scannedHistory`), (snapshot) => {
@@ -596,14 +598,20 @@ const App: React.FC = () => {
                     });
                 }
             }
-        } catch(e) { console.error("Error adding product", e); }
+        } catch(e: any) { 
+            console.error("Error adding product", e);
+            alert("Erro ao salvar produto no banco de dados (Firestore): " + (e.message || String(e)));
+        }
     };
 
     const handleUpdateProduct = async (updatedProduct: Product) => {
         if (!auth.currentUser) return;
         try {
             await updateDoc(doc(db, `users/${auth.currentUser.uid}/products`, String(updatedProduct.id)), updatedProduct as any);
-        } catch(e) { console.error(e); }
+        } catch(e: any) { 
+            console.error(e);
+            alert("Erro ao atualizar produto no banco de dados (Firestore): " + (e.message || String(e)));
+        }
         setEditingProduct(null);
     };
 
@@ -611,7 +619,10 @@ const App: React.FC = () => {
         if (!auth.currentUser) return;
         try {
             await deleteDoc(doc(db, `users/${auth.currentUser.uid}/products`, String(productId)));
-        } catch(e) { console.error(e); }
+        } catch(e: any) { 
+            console.error(e);
+            alert("Erro ao deletar produto no banco de dados (Firestore): " + (e.message || String(e)));
+        }
     };
     
     const handleAddShoppingItem = async (item: Omit<ShoppingItem, 'id' | 'checked'>) => {
