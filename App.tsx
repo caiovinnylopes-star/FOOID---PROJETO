@@ -24,10 +24,37 @@ import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, onSnapshot, writ
 
 // --- API KEY HELPER ---
 export const getGeminiApiKey = () => {
-    const local = localStorage.getItem('FOOID_GEMINI_API_KEY');
-    if (local && local.trim().length > 0) return local.trim();
+    // 1. Tenta obter do local storage direta (se houver)
+    const localDirect = localStorage.getItem('FOOID_GEMINI_API_KEY');
+    if (localDirect && localDirect.trim().length > 0) return localDirect.trim();
+
+    // 2. Tenta obter do objeto de configurações (fooid_settings) no local storage
+    try {
+        const settingsStr = localStorage.getItem('fooid_settings');
+        if (settingsStr) {
+            const parsed = JSON.parse(settingsStr);
+            if (parsed && typeof parsed === 'object' && parsed.geminiApiKey) {
+                const key = parsed.geminiApiKey.trim();
+                if (key.length > 0) return key;
+            }
+        }
+    } catch (e) {
+        console.error("Erro ao ler fooid_settings", e);
+    }
+
+    // 3. Fallback para a variável de ambiente (build-time)
     return (process.env.GEMINI_API_KEY || '');
 };
+
+export const validateGeminiApiKey = (): boolean => {
+    const key = getGeminiApiKey();
+    if (!key) {
+        alert("Chave API do Gemini não configurada!\n\nPor favor, vá em Configurações ⚙️ e configure sua chave de API gratuita do Gemini para ativar os recursos de IA (Escanear Notas, Voz, Sugestões e Receitas).");
+        return false;
+    }
+    return true;
+};
+
 
 // --- ERROR HANDLING ---
 enum OperationType {
@@ -827,6 +854,7 @@ const App: React.FC = () => {
     };
 
     const handleNFCeScan = async (url: string) => {
+        if (!validateGeminiApiKey()) return;
         setIsFetchingScannedProduct(true);
         try {
             // 1. Fetch HTML via CORS Proxy
@@ -915,6 +943,7 @@ Retorne apenas JSON puro`;
     };
 
     const handleNFCeTextImport = async (text: string) => {
+        if (!validateGeminiApiKey()) return;
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
         try {
@@ -986,6 +1015,7 @@ Retorne apenas JSON puro`;
     };
 
     const handleNFCePhotoScan = async (file: File) => {
+        if (!validateGeminiApiKey()) return;
         setIsFetchingScannedProduct(true);
         setPhotoFallbackModalOpen(false);
         try {
@@ -1709,6 +1739,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
     };
 
     const processVoiceCommand = async (text: string) => {
+        if (!validateGeminiApiKey()) return;
         try {
             const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const today = new Date().toISOString().split('T')[0];
@@ -1742,6 +1773,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
+            if (!validateGeminiApiKey()) return;
             setIsAnalyzingPhoto(true);
             try {
                 const resizedImage = await compressImage(e.target.files[0]);
@@ -2035,6 +2067,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
     };
 
     const processVoiceCommand = async (text: string) => {
+        if (!validateGeminiApiKey()) return;
         try {
             const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
             const today = new Date().toISOString().split('T')[0];
@@ -2066,6 +2099,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
     
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
+            if (!validateGeminiApiKey()) return;
             setIsAnalyzingPhoto(true);
             try {
                 const resizedImage = await compressImage(e.target.files[0]);
@@ -2270,6 +2304,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
 
     const handleSuggestPrice = async () => {
         if (!name) return alert("Preencha o nome do produto primeiro.");
+        if (!validateGeminiApiKey()) return;
         setIsSuggesting(true);
         try {
             const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
@@ -2386,6 +2421,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
 
     const handleSuggestPrice = async () => {
         if (!name) return alert("Preencha o nome do produto primeiro.");
+        if (!validateGeminiApiKey()) return;
         setIsSuggesting(true);
         try {
             const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
@@ -3094,6 +3130,7 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
             alert("Sua despensa está vazia! Adicione alguns produtos ou ingredientes primeiro para que o Chef IA possa criar receitas personalizadas.");
             return;
         }
+        if (!validateGeminiApiKey()) return;
 
         setIsGenerating(true);
         try {
@@ -3282,7 +3319,11 @@ const SettingsScreen: FC<{settings: Settings, setSettings: React.Dispatch<React.
                             type="password" 
                             placeholder="Insira sua Gemini API Key..."
                             value={settings.geminiApiKey || ''}
-                            onChange={e => setSettings(prev => ({ ...prev, geminiApiKey: e.target.value }))}
+                            onChange={e => {
+                                const val = e.target.value;
+                                setSettings(prev => ({ ...prev, geminiApiKey: val }));
+                                localStorage.setItem('FOOID_GEMINI_API_KEY', val);
+                            }}
                             className={`w-full p-2.5 rounded-lg text-xs outline-none border focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${
                                 highContrast 
                                     ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
