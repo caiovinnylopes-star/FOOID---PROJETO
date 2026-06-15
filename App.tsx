@@ -259,6 +259,7 @@ const App: React.FC = () => {
     const [recipes, setRecipes] = useState<Recipe[]>(MOCK_RECIPES);
     const [settings, setSettings] = usePersistentState<Settings>(FOOID_SETTINGS_KEY, DEFAULT_SETTINGS);
     const [firestoreError, setFirestoreError] = useState<string | null>(null);
+    const [dbStatus, setDbStatus] = useState<string>('🟡 Conectando...');
     
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [scannerMode, setScannerMode] = useState<'barcode' | 'qrcode' | 'nfce'>('barcode');
@@ -473,9 +474,11 @@ const App: React.FC = () => {
                     });
                     setProducts(data);
                     localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(data));
+                    setDbStatus('🟢 Conectado e Sincronizado');
                 }, (error) => {
                     console.warn("Firestore products sync failed, utilizando cache local:", error);
                     setFirestoreError(`Leitura de Produtos Negada: ${error.message}`);
+                    setDbStatus(`🔴 Erro na Leitura: ${error.code}`);
                 });
 
                 unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
@@ -541,6 +544,7 @@ const App: React.FC = () => {
                 setProducts([]);
                 setShoppingList([]);
                 setScannedHistory([]);
+                setDbStatus('🟡 Desconectado');
                 setScreen(prev => {
                     if (['dashboard', 'pantry', 'shoppingList', 'recipes', 'settings', 'editProfile'].includes(prev)) {
                         return 'welcome';
@@ -646,6 +650,7 @@ const App: React.FC = () => {
         } catch(e: any) { 
             console.warn("Firestore save failed, produto mantido no armazenamento local do usuário:", e);
             setFirestoreError(`Gravação Negada (Adicionar Produto): ${e.message || String(e)}`);
+            setDbStatus(`🔴 Erro na Gravação: ${e.code || e.message || String(e)}`);
         }
     };
 
@@ -662,6 +667,7 @@ const App: React.FC = () => {
         } catch(e: any) { 
             console.warn("Firestore update failed, produto atualizado no armazenamento local do usuário:", e);
             setFirestoreError(`Gravação Negada (Atualizar Produto): ${e.message || String(e)}`);
+            setDbStatus(`🔴 Erro na Atualização: ${e.code || e.message || String(e)}`);
         }
         setEditingProduct(null);
     };
@@ -679,6 +685,7 @@ const App: React.FC = () => {
         } catch(e: any) { 
             console.warn("Firestore delete failed, produto removido no armazenamento local do usuário:", e);
             setFirestoreError(`Gravação Negada (Deletar Produto): ${e.message || String(e)}`);
+            setDbStatus(`🔴 Erro na Exclusão: ${e.code || e.message || String(e)}`);
         }
     };
     
@@ -1282,6 +1289,7 @@ Não dê explicações ou textos fora do JSON.`;
                 onInstallClick={handleInstallClick}
                 currentUserEmail={auth.currentUser?.email}
                 currentUserId={auth.currentUser?.uid}
+                dbStatus={dbStatus}
             />
             
             <main className={`h-full w-full relative transition-all duration-300 ease-in-out ${isSidebarOpen ? 'brightness-50' : ''}`}>
@@ -2907,6 +2915,7 @@ const Sidebar: FC<{
     onInstallClick?: () => void;
     currentUserEmail?: string | null;
     currentUserId?: string | null;
+    dbStatus?: string;
 }> = ({ 
     isOpen, 
     onClose, 
@@ -2916,7 +2925,8 @@ const Sidebar: FC<{
     deferredPrompt, 
     onInstallClick,
     currentUserEmail,
-    currentUserId
+    currentUserId,
+    dbStatus
 }) => {
     const navigateAndClose = (screen: Screen) => {
         onNavigate(screen);
@@ -2953,6 +2963,7 @@ const Sidebar: FC<{
                         <div className="text-[10px] font-bold uppercase tracking-wider opacity-60">Conta Conectada</div>
                         <div className="text-xs font-semibold truncate" title={currentUserEmail}>{currentUserEmail}</div>
                         <div className="text-[9px] font-mono opacity-50 truncate" title={currentUserId || ''}>ID: {currentUserId}</div>
+                        <div className="text-[10px] font-medium mt-1 truncate">{dbStatus}</div>
                     </div>
                 )}
                 <nav className="p-4 flex flex-col gap-2">
