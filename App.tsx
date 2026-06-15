@@ -427,6 +427,20 @@ const App: React.FC = () => {
                     email: firebaseUser.email || ''
                 });
 
+                // Carregar dados salvos localmente primeiro para resposta instantânea e fallback offline/sem banco configurado
+                const localProd = localStorage.getItem(`fooid_products_${uid}`);
+                if (localProd) {
+                    try { setProducts(JSON.parse(localProd)); } catch(e) { console.error(e); }
+                }
+                const localShopping = localStorage.getItem(`fooid_shopping_${uid}`);
+                if (localShopping) {
+                    try { setShoppingList(JSON.parse(localShopping)); } catch(e) { console.error(e); }
+                }
+                const localHistory = localStorage.getItem(`fooid_history_${uid}`);
+                if (localHistory) {
+                    try { setScannedHistory(JSON.parse(localHistory)); } catch(e) { console.error(e); }
+                }
+
                 // Set up live Firestore collection listeners
                 unsubProducts = onSnapshot(collection(db, `users/${uid}/products`), (snapshot) => {
                     const data: Product[] = [];
@@ -438,9 +452,9 @@ const App: React.FC = () => {
                         } as Product);
                     });
                     setProducts(data);
+                    localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(data));
                 }, (error) => {
-                    console.error("Firestore products listener error:", error);
-                    alert("Erro ao sincronizar despensa (Firestore): " + error.message);
+                    console.warn("Firestore products sync failed, utilizando cache local:", error);
                 });
 
                 unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
@@ -453,9 +467,9 @@ const App: React.FC = () => {
                         } as ShoppingItem);
                     });
                     setShoppingList(data);
+                    localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(data));
                 }, (error) => {
-                    console.error("Firestore shoppingList listener error:", error);
-                    alert("Erro ao sincronizar lista de compras (Firestore): " + error.message);
+                    console.warn("Firestore shoppingList sync failed, utilizando cache local:", error);
                 });
 
                 unsubHistory = onSnapshot(collection(db, `users/${uid}/scannedHistory`), (snapshot) => {
@@ -467,9 +481,11 @@ const App: React.FC = () => {
                             id: docData.id || d.id
                         } as ScannedItem);
                     });
-                    setScannedHistory(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+                    const sorted = data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                    setScannedHistory(sorted);
+                    localStorage.setItem(`fooid_history_${uid}`, JSON.stringify(sorted));
                 }, (error) => {
-                    console.error("Firestore scannedHistory listener error:", error);
+                    console.warn("Firestore scannedHistory sync failed, utilizando cache local:", error);
                 });
 
                 // Fetch full profile from Firestore in the background
@@ -577,6 +593,7 @@ const App: React.FC = () => {
     
     const handleAddProduct = async (product: Omit<Product, 'id'>) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
         const newId = String(Date.now());
         const newProduct = { ...product, id: newId };
         
@@ -584,13 +601,18 @@ const App: React.FC = () => {
         setAddProductModalOpen(false);
         setAddProductInitialData(null);
         
+        // Salva instantaneamente local para ficar permanente e resiliente a falhas do Firebase
+        const updatedProducts = [...products, newProduct];
+        setProducts(updatedProducts);
+        localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedProducts));
+
         try {
-            await setDoc(doc(db, `users/${auth.currentUser.uid}/products`, newId), newProduct);
+            await setDoc(doc(db, `users/${uid}/products`, newId), newProduct);
             
             if (scannedHistory.length > 0) {
                 const latestScan = scannedHistory[0];
                 if (latestScan.id) {
-                    await updateDoc(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, String(latestScan.id)), {
+                    await updateDoc(doc(db, `users/${uid}/scannedHistory`, String(latestScan.id)), {
                         name: product.name,
                         quantity: product.quantity,
                         expiryDate: product.expiryDate,
@@ -599,108 +621,154 @@ const App: React.FC = () => {
                 }
             }
         } catch(e: any) { 
-            console.error("Error adding product", e);
-            alert("Erro ao salvar produto no banco de dados (Firestore): " + (e.message || String(e)));
+            console.warn("Firestore save failed, produto mantido no armazenamento local do usuário:", e);
         }
     };
 
     const handleUpdateProduct = async (updatedProduct: Product) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+        
+        const updatedList = products.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+        setProducts(updatedList);
+        localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedList));
+
         try {
-            await updateDoc(doc(db, `users/${auth.currentUser.uid}/products`, String(updatedProduct.id)), updatedProduct as any);
+            await updateDoc(doc(db, `users/${uid}/products`, String(updatedProduct.id)), updatedProduct as any);
         } catch(e: any) { 
-            console.error(e);
-            alert("Erro ao atualizar produto no banco de dados (Firestore): " + (e.message || String(e)));
+            console.warn("Firestore update failed, produto atualizado no armazenamento local do usuário:", e);
         }
         setEditingProduct(null);
     };
 
     const handleDeleteProduct = async (productId: string | number) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+
+        const updatedList = products.filter(p => p.id !== productId);
+        setProducts(updatedList);
+        localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedList));
+
         try {
-            await deleteDoc(doc(db, `users/${auth.currentUser.uid}/products`, String(productId)));
+            await deleteDoc(doc(db, `users/${uid}/products`, String(productId)));
         } catch(e: any) { 
-            console.error(e);
-            alert("Erro ao deletar produto no banco de dados (Firestore): " + (e.message || String(e)));
+            console.warn("Firestore delete failed, produto removido no armazenamento local do usuário:", e);
         }
     };
     
     const handleAddShoppingItem = async (item: Omit<ShoppingItem, 'id' | 'checked'>) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
         const newId = String(Date.now());
+        const newItem = { ...item, id: newId, checked: false };
+
+        const updatedList = [...shoppingList, newItem];
+        setShoppingList(updatedList);
+        localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(updatedList));
         
         // Fecha o modal imediatamente
         setAddShoppingItemModalOpen(false);
         
         try {
-            await setDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, newId), { ...item, id: newId, checked: false });
-        } catch(e) { console.error(e); }
+            await setDoc(doc(db, `users/${uid}/shoppingList`, newId), newItem);
+        } catch(e) { console.warn("Firestore save failed, item mantido localmente:", e); }
     };
 
     const handleUpdateShoppingItem = async (updatedItem: ShoppingItem) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+
+        const updatedList = shoppingList.map(i => i.id === updatedItem.id ? updatedItem : i);
+        setShoppingList(updatedList);
+        localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(updatedList));
+
         try {
-            await updateDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(updatedItem.id)), updatedItem as any);
-        } catch(e) { console.error(e); }
+            await updateDoc(doc(db, `users/${uid}/shoppingList`, String(updatedItem.id)), updatedItem as any);
+        } catch(e) { console.warn("Firestore update failed, item mantido localmente:", e); }
         setEditingShoppingItem(null);
     };
 
     const handleAddFromPantry = async (selectedProducts: Product[]) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+        
+        const newItems: ShoppingItem[] = selectedProducts.map(p => ({
+            id: String(Date.now() + Math.random()),
+            name: p.name,
+            category: p.category,
+            quantity: '1 un',
+            checked: false
+        }));
+
+        const updatedList = [...shoppingList, ...newItems];
+        setShoppingList(updatedList);
+        localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(updatedList));
+
+        setAddFromPantryModalOpen(false);
+
         try {
             const batch = writeBatch(db);
-            selectedProducts.forEach(p => {
-                const newId = String(Date.now() + Math.random());
-                const ref = doc(db, `users/${auth.currentUser.uid}/shoppingList`, newId);
-                batch.set(ref, {
-                    id: newId,
-                    name: p.name,
-                    category: p.category,
-                    quantity: '1 un',
-                    checked: false
-                });
+            newItems.forEach(item => {
+                const ref = doc(db, `users/${uid}/shoppingList`, item.id);
+                batch.set(ref, item);
             });
             await batch.commit();
-        } catch(e) { console.error(e); }
-        setAddFromPantryModalOpen(false);
+        } catch(e) { console.warn("Firestore add from pantry failed, mantido localmente:", e); }
     };
 
     const handleToggleShoppingItem = async (itemId: string | number) => {
         if (!auth.currentUser) return;
-        const item = shoppingList.find(i => i.id === itemId);
-        if (!item) return;
+        const uid = auth.currentUser.uid;
+        const updatedList = shoppingList.map(item => item.id === itemId ? { ...item, checked: !item.checked } : item);
+        setShoppingList(updatedList);
+        localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(updatedList));
+
         try {
-            await updateDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(itemId)), { checked: !item.checked });
-        } catch(e) { console.error(e); }
+            await updateDoc(doc(db, `users/${uid}/shoppingList`, String(itemId)), { checked: !shoppingList.find(i => i.id === itemId)?.checked });
+        } catch(e) { console.warn("Firestore toggle failed, mantido localmente:", e); }
     };
 
     const handleDeleteShoppingItem = async (itemId: string | number) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+        const updatedList = shoppingList.filter(item => item.id !== itemId);
+        setShoppingList(updatedList);
+        localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(updatedList));
+
         try {
-            await deleteDoc(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(itemId)));
-        } catch(e) { console.error(e); }
+            await deleteDoc(doc(db, `users/${uid}/shoppingList`, String(itemId)));
+        } catch(e) { console.warn("Firestore delete failed, mantido localmente:", e); }
     };
 
     const handleClearPurchased = async () => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+        const updatedList = shoppingList.filter(item => !item.checked);
+        setShoppingList(updatedList);
+        localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(updatedList));
+
         try {
             const batch = writeBatch(db);
             shoppingList.filter(item => item.checked).forEach(item => {
-                batch.delete(doc(db, `users/${auth.currentUser.uid}/shoppingList`, String(item.id)));
+                batch.delete(doc(db, `users/${uid}/shoppingList`, String(item.id)));
             });
             await batch.commit();
-        } catch(e) { console.error(e); }
+        } catch(e) { console.warn("Firestore clear purchased failed, mantido localmente:", e); }
     };
 
     const handleClearHistory = async () => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+        setScannedHistory([]);
+        localStorage.removeItem(`fooid_history_${uid}`);
+
         try {
             const batch = writeBatch(db);
             scannedHistory.forEach(item => {
-                if (item.id) batch.delete(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, String(item.id)));
+                if (item.id) batch.delete(doc(db, `users/${uid}/scannedHistory`, String(item.id)));
             });
             await batch.commit();
-        } catch(e) { console.error(e); }
+        } catch(e) { console.warn("Firestore clear history failed, mantido localmente:", e); }
     };
 
     const handleScanSuccess = async (rawCode: string) => {
@@ -774,7 +842,11 @@ const App: React.FC = () => {
                 quantity: quantity
             };
             if (auth.currentUser) {
-                setDoc(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, newItemId), newItem).catch(console.error);
+                const uid = auth.currentUser.uid;
+                setDoc(doc(db, `users/${uid}/scannedHistory`, newItemId), newItem).catch(console.error);
+                const updatedHistory = [newItem, ...scannedHistory];
+                setScannedHistory(updatedHistory);
+                localStorage.setItem(`fooid_history_${uid}`, JSON.stringify(updatedHistory));
             }
 
             setTempScannedData({
@@ -802,7 +874,11 @@ const App: React.FC = () => {
                 quantity: '1 un'
             };
             if (auth.currentUser) {
-                setDoc(doc(db, `users/${auth.currentUser.uid}/scannedHistory`, newItemId), newItem).catch(console.error);
+                const uid = auth.currentUser.uid;
+                setDoc(doc(db, `users/${uid}/scannedHistory`, newItemId), newItem).catch(console.error);
+                const updatedHistory = [newItem, ...scannedHistory];
+                setScannedHistory(updatedHistory);
+                localStorage.setItem(`fooid_history_${uid}`, JSON.stringify(updatedHistory));
             }
 
             setTempScannedData({ 
@@ -1067,12 +1143,13 @@ Não dê explicações ou textos fora do JSON.`;
 
     const handleConfirmNfceImport = async (selectedProducts: NFCeProduct[]) => {
         if (!auth.currentUser) return;
+        const uid = auth.currentUser.uid;
+        
         try {
             const batch = writeBatch(db);
-            const uid = auth.currentUser.uid;
+            const importedProducts: Product[] = [];
 
             selectedProducts.forEach(p => {
-                // Map categories
                 let cat: CategoryKey = 'others';
                 const c = p.categoria.toLowerCase();
                 if (c.includes('grão') || c.includes('pão') || c.includes('massa')) cat = 'grains';
@@ -1086,25 +1163,32 @@ Não dê explicações ou textos fora do JSON.`;
                 const newId = String(Date.now() + Math.random());
                 const ref = doc(db, `users/${uid}/products`, newId);
                 
-                batch.set(ref, {
+                const prodData = {
                     id: newId,
                     name: p.nome_padronizado,
                     category: cat,
                     quantity: `${p.quantidade} ${p.unidade}`,
                     unit: p.quantidade,
-                    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Default 30 days
+                    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
                     storage: 'pantry',
                     notes: `Importado de NFC-e: ${p.nome_original}`
-                });
+                };
+                importedProducts.push(prodData);
+                batch.set(ref, prodData);
             });
 
-            await batch.commit();
+            // Salva no estado local e localStorage instantaneamente
+            const updatedProducts = [...products, ...importedProducts];
+            setProducts(updatedProducts);
+            localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedProducts));
+
             setIsImportingNfce(false);
             setNfceProducts([]);
             alert(`${selectedProducts.length} produtos importados com sucesso!`);
+
+            await batch.commit();
         } catch (e) {
-            console.error("Erro ao importar produtos NFC-e no Firestore:", e);
-            alert("Erro ao salvar os produtos no banco de dados. Tente novamente.");
+            console.warn("Erro ao salvar os produtos importados no Firestore:", e);
         }
     };
 
