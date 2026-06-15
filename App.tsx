@@ -221,6 +221,30 @@ function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch
     return [state, setState];
 }
 
+const getGeminiClient = () => {
+    const key = process.env.GEMINI_API_KEY || firebaseConfig.apiKey || '';
+    return new GoogleGenAI({ apiKey: key });
+};
+
+const fetchWithRetry = async (url: string, retries = 2, delay = 1000): Promise<Response> => {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await fetch(url);
+            if (res.ok) return res;
+            if (res.status === 429 && i < retries) {
+                await new Promise(resolve => setTimeout(resolve, delay * 2));
+                continue;
+            }
+        } catch (err) {
+            if (i === retries) throw err;
+        }
+        if (i < retries) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+    throw new Error("Falha ao conectar ao servidor de imagens (OpenFoodFacts) após várias tentativas de rede.");
+};
+
 const App: React.FC = () => {
     const [screen, setScreen] = useState<Screen>('splash');
     const [user, setUser] = useState<User | null>(null);
@@ -235,11 +259,6 @@ const App: React.FC = () => {
     const [recipes, setRecipes] = useState<Recipe[]>(MOCK_RECIPES);
     const [settings, setSettings] = usePersistentState<Settings>(FOOID_SETTINGS_KEY, DEFAULT_SETTINGS);
     const [firestoreError, setFirestoreError] = useState<string | null>(null);
-
-    const getGeminiClient = useCallback(() => {
-        const key = process.env.GEMINI_API_KEY || firebaseConfig.apiKey || '';
-        return new GoogleGenAI({ apiKey: key });
-    }, []);
     
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [scannerMode, setScannerMode] = useState<'barcode' | 'qrcode' | 'nfce'>('barcode');
@@ -716,7 +735,7 @@ const App: React.FC = () => {
         try {
             const batch = writeBatch(db);
             newItems.forEach(item => {
-                const ref = doc(db, `users/${uid}/shoppingList`, item.id);
+                const ref = doc(db, `users/${uid}/shoppingList`, String(item.id));
                 batch.set(ref, item);
             });
             await batch.commit();
@@ -803,7 +822,7 @@ const App: React.FC = () => {
         
         try {
             const url = `https://world.openfoodfacts.org/api/v0/product/${lookupCode}.json`;
-            const response = await fetch(url);
+            const response = await fetchWithRetry(url);
 
             if (!response.ok) {
                 throw new Error(`Erro HTTP: ${response.status}`);
@@ -914,7 +933,7 @@ const App: React.FC = () => {
         try {
             // 1. Fetch HTML via CORS Proxy
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-            const res = await fetch(proxyUrl);
+            const res = await fetchWithRetry(proxyUrl);
             if (!res.ok) throw new Error("Erro ao acessar proxy");
             const proxyData = await res.json();
             const htmlContent = proxyData.contents;
@@ -1170,7 +1189,7 @@ Não dê explicações ou textos fora do JSON.`;
                 const newId = String(Date.now() + Math.random());
                 const ref = doc(db, `users/${uid}/products`, newId);
                 
-                const prodData = {
+                const prodData: Product = {
                     id: newId,
                     name: p.nome_padronizado,
                     category: cat,
@@ -1181,7 +1200,7 @@ Não dê explicações ou textos fora do JSON.`;
                     notes: `Importado de NFC-e: ${p.nome_original}`
                 };
                 importedProducts.push(prodData);
-                batch.set(ref, prodData);
+                batch.set(ref, prodData as any);
             });
 
             // Salva no estado local e localStorage instantaneamente
@@ -1887,7 +1906,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                     if (detectedName) {
                         const searchUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(detectedName)}&search_simple=1&action=process&json=1&page_size=1`;
                         try {
-                            const offRes = await fetch(searchUrl);
+                            const offRes = await fetchWithRetry(searchUrl);
                             const offData = await offRes.json();
                             if (offData.products && offData.products.length > 0) {
                                 const p = offData.products[0];
@@ -1926,7 +1945,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
         try {
             // Search OpenFoodFacts for REAL product images
             const searchUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(name)}&search_simple=1&action=process&json=1&page_size=1`;
-            const response = await fetch(searchUrl);
+            const response = await fetchWithRetry(searchUrl);
             const data = await response.json();
 
             if (data.products && data.products.length > 0) {
@@ -1947,9 +1966,9 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
             } else {
                 alert("Produto real não encontrado na base de dados.");
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Search Error", error);
-            alert("Erro ao buscar imagem.");
+            alert(`Erro ao buscar imagem. Detalhe: ${error.message || String(error)}`);
         } finally {
             setIsGeneratingImage(false);
         }
@@ -2210,7 +2229,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                     if (detectedName) {
                         const searchUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(detectedName)}&search_simple=1&action=process&json=1&page_size=1`;
                         try {
-                            const offRes = await fetch(searchUrl);
+                            const offRes = await fetchWithRetry(searchUrl);
                             const offData = await offRes.json();
                             if (offData.products && offData.products.length > 0) {
                                 const p = offData.products[0];
@@ -2245,7 +2264,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
         try {
             // Search OpenFoodFacts for REAL product images
             const searchUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(name)}&search_simple=1&action=process&json=1&page_size=1`;
-            const response = await fetch(searchUrl);
+            const response = await fetchWithRetry(searchUrl);
             const data = await response.json();
 
             if (data.products && data.products.length > 0) {
@@ -2266,9 +2285,9 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
             } else {
                 alert("Produto real não encontrado na base de dados.");
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Search Error", error);
-            alert("Erro ao buscar imagem.");
+            alert(`Erro ao buscar imagem. Detalhe: ${error.message || String(error)}`);
         } finally {
             setIsGeneratingImage(false);
         }
