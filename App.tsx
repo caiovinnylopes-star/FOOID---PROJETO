@@ -1280,6 +1280,8 @@ Não dê explicações ou textos fora do JSON.`;
                 highContrast={highContrast} 
                 deferredPrompt={deferredPrompt}
                 onInstallClick={handleInstallClick}
+                currentUserEmail={auth.currentUser?.email}
+                currentUserId={auth.currentUser?.uid}
             />
             
             <main className={`h-full w-full relative transition-all duration-300 ease-in-out ${isSidebarOpen ? 'brightness-50' : ''}`}>
@@ -2895,7 +2897,27 @@ const RegisterScreen: FC<{onNavigate: (s: Screen) => void, onGoogleSignIn: () =>
     );
 };
 
-const Sidebar: FC<{ isOpen: boolean; onClose: () => void; onNavigate: (s: Screen) => void, darkMode?: boolean, highContrast?: boolean, deferredPrompt?: any, onInstallClick?: () => void }> = ({ isOpen, onClose, onNavigate, darkMode, highContrast, deferredPrompt, onInstallClick }) => {
+const Sidebar: FC<{ 
+    isOpen: boolean; 
+    onClose: () => void; 
+    onNavigate: (s: Screen) => void; 
+    darkMode?: boolean; 
+    highContrast?: boolean; 
+    deferredPrompt?: any; 
+    onInstallClick?: () => void;
+    currentUserEmail?: string | null;
+    currentUserId?: string | null;
+}> = ({ 
+    isOpen, 
+    onClose, 
+    onNavigate, 
+    darkMode, 
+    highContrast, 
+    deferredPrompt, 
+    onInstallClick,
+    currentUserEmail,
+    currentUserId
+}) => {
     const navigateAndClose = (screen: Screen) => {
         onNavigate(screen);
         onClose();
@@ -2925,6 +2947,14 @@ const Sidebar: FC<{ isOpen: boolean; onClose: () => void; onNavigate: (s: Screen
                      </div>
                      <button onClick={onClose} aria-label="Close menu"><CloseIcon className={`w-6 h-6 ${highContrast ? 'text-yellow-400' : 'text-red-500'}`}/></button>
                 </div>
+
+                {currentUserEmail && (
+                    <div className={`px-4 py-3 border-b flex flex-col gap-0.5 ${highContrast ? 'border-yellow-400 bg-yellow-950/20 text-yellow-300' : (darkMode ? 'border-zinc-700 bg-zinc-900/40 text-gray-300' : 'border-white/30 bg-white/40 text-gray-700')}`}>
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-60">Conta Conectada</div>
+                        <div className="text-xs font-semibold truncate" title={currentUserEmail}>{currentUserEmail}</div>
+                        <div className="text-[9px] font-mono opacity-50 truncate" title={currentUserId || ''}>ID: {currentUserId}</div>
+                    </div>
+                )}
                 <nav className="p-4 flex flex-col gap-2">
                     <NavItem icon={<PantryIcon />} label="Meus Produtos" onClick={() => navigateAndClose('pantry')} />
                     <NavItem icon={<CameraIcon />} label="Leitor QR/Código de Barras" onClick={() => navigateAndClose('scanner')} />
