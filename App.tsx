@@ -3412,6 +3412,33 @@ const SettingsScreen: FC<{settings: Settings, setSettings: React.Dispatch<React.
                     <Toggle label="Animações Reduzidas" desc="Reduz animações para usuários sensíveis a movimento" value={settings.accessibility.reducedMotion} onChange={v => updateSetting('accessibility', 'reducedMotion', v)} />
                 </Section>
 
+                <Section title="Sincronização Cloud" icon="☁️">
+                    <button 
+                        type="button"
+                        onClick={async () => {
+                            if (!auth.currentUser) return alert("Você precisa estar logado para testar o banco de dados.");
+                            const uid = auth.currentUser.uid;
+                            alert("Testando gravação e leitura no Firestore...");
+                            try {
+                                const testRef = doc(db, `users/${uid}/pantry_diagnostics`, 'test_connection');
+                                await setDoc(testRef, { testedAt: new Date().toISOString(), status: 'OK' });
+                                const snap = await getDoc(testRef);
+                                if (snap.exists() && snap.data()?.status === 'OK') {
+                                    alert("✅ CONEXÃO COM FIRESTORE OK!\nLeitura e Gravação em tempo real funcionando perfeitamente na nuvem!");
+                                } else {
+                                    alert("⚠️ Erro: Gravação efetuada mas os dados retornados estão incorretos.");
+                                }
+                            } catch (error: any) {
+                                console.error("Firebase Test Error", error);
+                                alert(`❌ FALHA NA CONEXÃO FIRESTORE!\n\nErro: ${error.message || String(error)}\n\nIsso indica que o banco de dados ainda não foi criado no console do Firebase ou as Regras de Segurança estão bloqueando o acesso.`);
+                            }
+                        }}
+                        className={`w-full py-2.5 px-4 font-bold rounded-lg shadow transition ${highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white hover:bg-red-600'}`}
+                    >
+                        Testar Conexão em Tempo Real
+                    </button>
+                </Section>
+
             </div>
             <BottomNav activeScreen="settings" onNavigate={onNavigate} darkMode={darkMode} highContrast={highContrast} />
         </ScreenWrapper>
