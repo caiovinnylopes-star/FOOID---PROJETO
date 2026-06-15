@@ -234,6 +234,7 @@ const App: React.FC = () => {
 
     const [recipes, setRecipes] = useState<Recipe[]>(MOCK_RECIPES);
     const [settings, setSettings] = usePersistentState<Settings>(FOOID_SETTINGS_KEY, DEFAULT_SETTINGS);
+    const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
     const getGeminiClient = useCallback(() => {
         const key = process.env.GEMINI_API_KEY || firebaseConfig.apiKey || '';
@@ -455,6 +456,7 @@ const App: React.FC = () => {
                     localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(data));
                 }, (error) => {
                     console.warn("Firestore products sync failed, utilizando cache local:", error);
+                    setFirestoreError(`Leitura de Produtos Negada: ${error.message}`);
                 });
 
                 unsubShopping = onSnapshot(collection(db, `users/${uid}/shoppingList`), (snapshot) => {
@@ -470,6 +472,7 @@ const App: React.FC = () => {
                     localStorage.setItem(`fooid_shopping_${uid}`, JSON.stringify(data));
                 }, (error) => {
                     console.warn("Firestore shoppingList sync failed, utilizando cache local:", error);
+                    setFirestoreError(`Leitura da Lista Negada: ${error.message}`);
                 });
 
                 unsubHistory = onSnapshot(collection(db, `users/${uid}/scannedHistory`), (snapshot) => {
@@ -486,6 +489,7 @@ const App: React.FC = () => {
                     localStorage.setItem(`fooid_history_${uid}`, JSON.stringify(sorted));
                 }, (error) => {
                     console.warn("Firestore scannedHistory sync failed, utilizando cache local:", error);
+                    setFirestoreError(`Leitura do Histórico Negada: ${error.message}`);
                 });
 
                 // Fetch full profile from Firestore in the background
@@ -622,6 +626,7 @@ const App: React.FC = () => {
             }
         } catch(e: any) { 
             console.warn("Firestore save failed, produto mantido no armazenamento local do usuário:", e);
+            setFirestoreError(`Gravação Negada (Adicionar Produto): ${e.message || String(e)}`);
         }
     };
 
@@ -637,6 +642,7 @@ const App: React.FC = () => {
             await updateDoc(doc(db, `users/${uid}/products`, String(updatedProduct.id)), updatedProduct as any);
         } catch(e: any) { 
             console.warn("Firestore update failed, produto atualizado no armazenamento local do usuário:", e);
+            setFirestoreError(`Gravação Negada (Atualizar Produto): ${e.message || String(e)}`);
         }
         setEditingProduct(null);
     };
@@ -653,6 +659,7 @@ const App: React.FC = () => {
             await deleteDoc(doc(db, `users/${uid}/products`, String(productId)));
         } catch(e: any) { 
             console.warn("Firestore delete failed, produto removido no armazenamento local do usuário:", e);
+            setFirestoreError(`Gravação Negada (Deletar Produto): ${e.message || String(e)}`);
         }
     };
     
@@ -1257,6 +1264,21 @@ Não dê explicações ou textos fora do JSON.`;
             />
             
             <main className={`h-full w-full relative transition-all duration-300 ease-in-out ${isSidebarOpen ? 'brightness-50' : ''}`}>
+                {firestoreError && (
+                    <div className="absolute top-4 left-4 right-4 bg-red-600 text-white rounded-2xl p-4 shadow-2xl z-50 flex flex-col gap-2 font-medium border border-red-500 max-w-md mx-auto animate-slide-in-top">
+                        <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xl">⚠️</span>
+                                <span className="font-extrabold text-sm uppercase tracking-wide">Erro do Banco de Dados Cloud</span>
+                            </div>
+                            <button onClick={() => setFirestoreError(null)} className="text-white bg-black/20 hover:bg-black/40 px-2 py-0.5 rounded-lg text-xs font-bold transition-all">Fechar</button>
+                        </div>
+                        <p className="text-xs text-white/90 leading-tight">O Firebase recusou a sincronização. Erro: <code className="bg-black/30 px-1 py-0.5 rounded font-mono text-[10px] block mt-1 break-words">{firestoreError}</code></p>
+                        <p className="text-[10px] text-yellow-300 font-bold leading-normal border-t border-white/20 pt-2 mt-1">
+                            Como o servidor recusou, os dados estão ficando salvos apenas localmente neste aparelho. Para salvar em nuvem (permanente em qualquer dispositivo), acesse seu Firebase Console, clique em "Firestore Database" e crie o banco de dados e publique as regras de acesso.
+                        </p>
+                    </div>
+                )}
                 {mainContent}
             </main>
 
