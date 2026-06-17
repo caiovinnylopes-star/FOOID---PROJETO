@@ -245,6 +245,19 @@ const fetchWithRetry = async (url: string, retries = 2, delay = 1000): Promise<R
     throw new Error("Falha ao conectar ao servidor de imagens (OpenFoodFacts) após várias tentativas de rede.");
 };
 
+const sanitizeData = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (obj instanceof Date) return obj.toISOString();
+    if (Array.isArray(obj)) return obj.map(sanitizeData);
+    const newObj: any = {};
+    for (const key in obj) {
+        if (obj[key] !== undefined) {
+            newObj[key] = sanitizeData(obj[key]);
+        }
+    }
+    return newObj;
+};
+
 const App: React.FC = () => {
     const [screen, setScreen] = useState<Screen>('splash');
     const [user, setUser] = useState<User | null>(null);
@@ -472,8 +485,27 @@ const App: React.FC = () => {
                             id: docData.id || d.id
                         } as Product);
                     });
-                    setProducts(data);
-                    localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(data));
+                    
+                    const localDataStr = localStorage.getItem(`fooid_products_${uid}`);
+                    let localData: Product[] = [];
+                    if (localDataStr) {
+                        try { localData = JSON.parse(localDataStr); } catch(e) {}
+                    }
+                    
+                    if (data.length === 0 && localData.length > 0) {
+                        console.warn("Firestore retornou lista vazia, mas há dados locais. Sincronizando dados locais para a nuvem...");
+                        const batch = writeBatch(db);
+                        localData.forEach(p => {
+                            const ref = doc(db, `users/${uid}/products`, String(p.id));
+                            batch.set(ref, sanitizeData(p));
+                        });
+                        batch.commit().catch(e => console.error("Falha ao sincronizar dados locais para nuvem:", e));
+                        setProducts(localData);
+                    } else {
+                        setProducts(data);
+                        localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(data));
+                    }
+                    
                     setDbStatus('🟢 Conectado e Sincronizado');
                 }, (error) => {
                     console.warn("Firestore products sync failed, utilizando cache local:", error);
@@ -634,7 +666,7 @@ const App: React.FC = () => {
         localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedProducts));
 
         try {
-            await setDoc(doc(db, `users/${uid}/products`, newId), newProduct);
+            await setDoc(doc(db, `users/${uid}/products`, newId), sanitizeData(newProduct));
             
             if (scannedHistory.length > 0) {
                 const latestScan = scannedHistory[0];
@@ -663,7 +695,7 @@ const App: React.FC = () => {
         localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedList));
 
         try {
-            await updateDoc(doc(db, `users/${uid}/products`, String(updatedProduct.id)), updatedProduct as any);
+            await updateDoc(doc(db, `users/${uid}/products`, String(updatedProduct.id)), sanitizeData(updatedProduct));
         } catch(e: any) { 
             console.warn("Firestore update failed, produto atualizado no armazenamento local do usuário:", e);
             setFirestoreError(`Gravação Negada (Atualizar Produto): ${e.message || String(e)}`);
@@ -1207,7 +1239,7 @@ Não dê explicações ou textos fora do JSON.`;
                     notes: `Importado de NFC-e: ${p.nome_original}`
                 };
                 importedProducts.push(prodData);
-                batch.set(ref, prodData as any);
+                batch.set(ref, sanitizeData(prodData));
             });
 
             // Salva no estado local e localStorage instantaneamente
