@@ -492,16 +492,30 @@ const App: React.FC = () => {
                         try { localData = JSON.parse(localDataStr); } catch(e) {}
                     }
                     
-                    if (data.length === 0 && localData.length > 0) {
-                        console.warn("Firestore retornou lista vazia, mas há dados locais. Sincronizando dados locais para a nuvem...");
-                        const batch = writeBatch(db);
-                        localData.forEach(p => {
-                            const ref = doc(db, `users/${uid}/products`, String(p.id));
-                            batch.set(ref, sanitizeData(p));
-                        });
-                        batch.commit().catch(e => console.error("Falha ao sincronizar dados locais para nuvem:", e));
-                        setProducts(localData);
+                    // Se o Firestore retornou vazio (0 itens)
+                    if (data.length === 0) {
+                        // Mas temos dados locais (o cache offline)
+                        if (localData.length > 0) {
+                            console.warn("Firestore retornou lista vazia, mas há dados locais. Mantendo dados locais e sincronizando para a nuvem...");
+                            setProducts(localData); // Garante que a UI veja o cache
+                            
+                            // Tenta fazer o upload em background
+                            const batch = writeBatch(db);
+                            localData.forEach(p => {
+                                const ref = doc(db, `users/${uid}/products`, String(p.id));
+                                batch.set(ref, sanitizeData(p));
+                            });
+                            batch.commit().catch(e => console.error("Falha ao sincronizar dados locais para nuvem:", e));
+                        } else {
+                            // Se ambos são vazios, apenas limpa a UI
+                            setProducts([]);
+                        }
                     } else {
+                        // O Firestore tem dados (1 ou mais), então a nuvem é a fonte da verdade
+                        // Faz um merge simples se quiser, ou apenas confia na nuvem.
+                        // Aqui confiamos na nuvem para não duplicar dados desnecessariamente se conectou em outro PC.
+                        
+                        // Atualizamos a UI e o cache local
                         setProducts(data);
                         localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(data));
                     }
