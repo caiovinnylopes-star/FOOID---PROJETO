@@ -291,9 +291,6 @@ const App: React.FC = () => {
     const [tempScannedData, setTempScannedData] = useState<any>(null);
 
     const [scannedLink, setScannedLink] = useState<string | null>(null);
-    const [nfceProducts, setNfceProducts] = useState<NFCeProduct[]>([]);
-    const [isImportingNfce, setIsImportingNfce] = useState(false);
-    const [isPhotoFallbackModalOpen, setPhotoFallbackModalOpen] = useState(false);
 
     // PWA Install Prompt State
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -985,168 +982,10 @@ const App: React.FC = () => {
         setAddProductModalOpen(true);
     };
 
-    const handleNFCeScan = async (url: string) => {
-        setIsFetchingScannedProduct(true);
-        try {
-            // 1. Fetch HTML via CORS Proxy
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-            const res = await fetchWithRetry(proxyUrl);
-            if (!res.ok) throw new Error("Erro ao acessar proxy");
-            const proxyData = await res.json();
-            const htmlContent = proxyData.contents;
-            
-            // 2. Extract raw text from HTML
-            const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
-            const elementsToRemove = doc.querySelectorAll('script, style, noscript, svg, img');
-            for (let i = 0; i < elementsToRemove.length; i++) {
-                 elementsToRemove[i].remove();
-            }
-            let text = doc.body.innerText || "";
-            text = text.replace(/\s+/g, ' ').trim();
 
-            // 3. Process with AI
-            const ai = getGeminiClient();
-            const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e), com foco em supermercados.
-Abaixo está o texto extraído da página da nota fiscal:
----
-${text.substring(0, 20000)}
----
-Extraia TODOS os produtos da nota.
-Para cada produto, retornar:
-nome_original (exatamente como está na nota)
-nome_padronizado (nome simplificado, ex: "Arroz", "Leite", "Coca-Cola")
-quantidade (número)
-unidade (UN, KG, LT, etc)
-categoria (ex: Grãos, Bebidas, Laticínios, Limpeza, Hortifruti, Carnes, etc)
-Ignorar informações irrelevantes como:
-dados do mercado
-valores totais
-impostos
-Corrigir possíveis variações de escrita:
-Ex:
-"ARROZ TIO JOAO 5KG" → "Arroz"
-"LEITE ITALAC INTEGRAL 1L" → "Leite Integral"
-Retornar SOMENTE um JSON válido no formato:
-{
-"produtos": [
-{
-"nome_original": "...",
-"nome_padronizado": "...",
-"quantidade": 1,
-"unidade": "UN",
-"categoria": "..."
-}
-]
-}
-Caso não encontre produtos, retornar:
-{
-"produtos": []
-}
-IMPORTANTE:
-Não explique nada
-Não escreva texto fora do JSON
-Retorne apenas JSON puro`;
-
-            const response = await ai.models.generateContent({ 
-                model: 'gemini-2.5-flash', 
-                contents: prompt, 
-                config: { 
-                    responseMimeType: "application/json"
-                } 
-            });
-
-            if (response.text) {
-                const data = JSON.parse(response.text);
-                if (data.produtos && data.produtos.length > 0) {
-                    setNfceProducts(data.produtos);
-                    setIsImportingNfce(true);
-                } else {
-                    alert("Nenhum produto encontrado nesta nota fiscal.");
-                }
-            }
-        } catch (error) {
-            console.error("Erro ao processar NFC-e:", error);
-            setScannedLink(url);
-            setPhotoFallbackModalOpen(true);
-        } finally {
-            setIsFetchingScannedProduct(false);
-        }
-    };
-
-    const handleNFCeTextImport = async (text: string) => {
-        setIsFetchingScannedProduct(true);
-        setPhotoFallbackModalOpen(false);
-        try {
-            const ai = getGeminiClient();
-            const prompt = `Você é um sistema especialista em extração de dados de textos de notas fiscais brasileiras (NFC-e), com foco em supermercados.
-Abaixo está o texto extraído da página da nota fiscal:
----
-${text.substring(0, 45000)}
----
-Extraia TODOS os produtos da nota.
-Para cada produto, retornar:
-nome_original (exatamente como está na nota)
-nome_padronizado (nome simplificado, ex: "Arroz", "Leite", "Coca-Cola")
-quantidade (número)
-unidade (UN, KG, LT, etc)
-categoria (ex: Grãos, Bebidas, Laticínios, Limpeza, Hortifruti, Carnes, etc)
-Ignorar informações irrelevantes como:
-dados do mercado
-valores totais
-impostos
-Corrigir possíveis variações de escrita:
-Ex:
-"ARROZ TIO JOAO 5KG" → "Arroz"
-"LEITE ITALAC INTEGRAL 1L" → "Leite Integral"
-Retornar SOMENTE um JSON válido no formato:
-{
-"produtos": [
-{
-"nome_original": "...",
-"nome_padronizado": "...",
-"quantidade": 1,
-"unidade": "UN",
-"categoria": "..."
-}
-]
-}
-Caso não encontre produtos, retornar:
-{
-"produtos": []
-}
-IMPORTANTE:
-Não explique nada
-Não escreva texto fora do JSON
-Retorne apenas JSON puro`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json"
-                }
-            });
-
-            if (response.text) {
-                const data = JSON.parse(response.text);
-                if (data.produtos && data.produtos.length > 0) {
-                    setNfceProducts(data.produtos);
-                    setIsImportingNfce(true);
-                } else {
-                    alert("Nenhum produto foi encontrado no texto colado.");
-                }
-            }
-        } catch (error) {
-            console.error("Erro ao importar texto da NFC-e:", error);
-            alert("Não foi possível processar o texto da nota fiscal. Verifique se o texto está no formato correto ou tente novamente.");
-        } finally {
-            setIsFetchingScannedProduct(false);
-        }
-    };
 
     const handleNFCePhotoScan = async (file: File) => {
         setIsFetchingScannedProduct(true);
-        setPhotoFallbackModalOpen(false);
         try {
             const fileToBase64 = (f: File): Promise<string> => {
                 return new Promise((resolve, reject) => {
@@ -1209,69 +1048,60 @@ Não dê explicações ou textos fora do JSON.`;
 
             if (response.text) {
                 const data = JSON.parse(response.text);
-                if (data.produtos && data.produtos.length > 0) {
-                    setNfceProducts(data.produtos);
-                    setIsImportingNfce(true);
+                const extractedProducts: NFCeProduct[] = data.produtos || [];
+                
+                if (extractedProducts.length > 0) {
+                    if (!auth.currentUser) return;
+                    const uid = auth.currentUser.uid;
+                    
+                    const batch = writeBatch(db);
+                    const importedProducts: Product[] = [];
+
+                    extractedProducts.forEach(p => {
+                        let cat: CategoryKey = 'others';
+                        const c = p.categoria.toLowerCase();
+                        if (c.includes('grão') || c.includes('pão') || c.includes('massa')) cat = 'grains';
+                        else if (c.includes('bebida') || c.includes('suco') || c.includes('refrigerante')) cat = 'beverages';
+                        else if (c.includes('laticínio') || c.includes('leite') || c.includes('queijo')) cat = 'dairy';
+                        else if (c.includes('limpeza')) cat = 'cleaning';
+                        else if (c.includes('hortifruti') || c.includes('fruta') || c.includes('vegetal') || c.includes('legume')) cat = 'vegetables';
+                        else if (c.includes('carne') || c.includes('frango') || c.includes('peixe')) cat = 'meats';
+                        else if (c.includes('higiene')) cat = 'hygiene';
+
+                        const newId = String(Date.now() + Math.random());
+                        const ref = doc(db, `users/${uid}/products`, newId);
+                        
+                        const prodData: Product = {
+                            id: newId,
+                            name: p.nome_padronizado,
+                            category: cat,
+                            quantity: `${p.quantidade} ${p.unidade}`,
+                            unit: p.quantidade,
+                            expiryDate: '', // Validade pendente para preenchimento futuro
+                            storage: 'pantry',
+                            notes: `Importado via Cupom: ${p.nome_original}`
+                        };
+                        importedProducts.push(prodData);
+                        batch.set(ref, sanitizeData(prodData));
+                    });
+
+                    // Update UI immediately
+                    const updatedProducts = [...products, ...importedProducts];
+                    setProducts(updatedProducts);
+                    localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedProducts));
+                    
+                    alert(`${extractedProducts.length} produtos importados para a despensa!`);
+                    
+                    await batch.commit();
                 } else {
-                    alert("Nenhum produto foi detectado na imagem desta nota fiscal. Tente tirar uma foto mais nítida e de perto.");
+                    alert("Nenhum produto foi detectado na imagem deste cupom. Tente tirar uma foto mais nítida e de perto.");
                 }
             }
         } catch (error) {
-            console.error("Erro no processamento visual da NFC-e:", error);
-            alert("Não foi possível processar a imagem da nota fiscal. Verifique sua conexão ou tente novamente com outra foto.");
+            console.error("Erro no processamento visual do cupom:", error);
+            alert("Não foi possível processar a imagem do cupom. Verifique sua conexão ou tente novamente com outra foto.");
         } finally {
             setIsFetchingScannedProduct(false);
-        }
-    };
-
-    const handleConfirmNfceImport = async (selectedProducts: NFCeProduct[]) => {
-        if (!auth.currentUser) return;
-        const uid = auth.currentUser.uid;
-        
-        try {
-            const batch = writeBatch(db);
-            const importedProducts: Product[] = [];
-
-            selectedProducts.forEach(p => {
-                let cat: CategoryKey = 'others';
-                const c = p.categoria.toLowerCase();
-                if (c.includes('grão') || c.includes('pão') || c.includes('massa')) cat = 'grains';
-                else if (c.includes('bebida') || c.includes('suco') || c.includes('refrigerante')) cat = 'beverages';
-                else if (c.includes('laticínio') || c.includes('leite') || c.includes('queijo')) cat = 'dairy';
-                else if (c.includes('limpeza')) cat = 'cleaning';
-                else if (c.includes('hortifruti') || c.includes('fruta') || c.includes('vegetal') || c.includes('legume')) cat = 'vegetables';
-                else if (c.includes('carne') || c.includes('frango') || c.includes('peixe')) cat = 'meats';
-                else if (c.includes('higiene')) cat = 'hygiene';
-
-                const newId = String(Date.now() + Math.random());
-                const ref = doc(db, `users/${uid}/products`, newId);
-                
-                const prodData: Product = {
-                    id: newId,
-                    name: p.nome_padronizado,
-                    category: cat,
-                    quantity: `${p.quantidade} ${p.unidade}`,
-                    unit: p.quantidade,
-                    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                    storage: 'pantry',
-                    notes: `Importado de NFC-e: ${p.nome_original}`
-                };
-                importedProducts.push(prodData);
-                batch.set(ref, sanitizeData(prodData));
-            });
-
-            // Salva no estado local e localStorage instantaneamente
-            const updatedProducts = [...products, ...importedProducts];
-            setProducts(updatedProducts);
-            localStorage.setItem(`fooid_products_${uid}`, JSON.stringify(updatedProducts));
-
-            setIsImportingNfce(false);
-            setNfceProducts([]);
-            alert(`${selectedProducts.length} produtos importados com sucesso!`);
-
-            await batch.commit();
-        } catch (e) {
-            console.warn("Erro ao salvar os produtos importados no Firestore:", e);
         }
     };
 
@@ -1302,7 +1132,7 @@ Não dê explicações ou textos fora do JSON.`;
             mainContent = <PantryScreen {...commonProps} products={products} onAddClick={() => setAddProductModalOpen(true)} onEditProduct={setEditingProduct} onDeleteProduct={handleDeleteProduct} />;
             break;
         case 'scanner':
-            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} onPhotoScan={() => setPhotoFallbackModalOpen(true)} />;
+            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} onPhotoSelected={handleNFCePhotoScan} />;
             break;
         case 'notifications':
             mainContent = <NotificationsScreen {...commonProps} notifications={notifications} onMarkAllRead={handleMarkAllNotificationsRead} />;
@@ -1397,17 +1227,7 @@ Não dê explicações ou textos fora do JSON.`;
             {isAddShoppingItemModalOpen && <AddShoppingItemModal onClose={() => setAddShoppingItemModalOpen(false)} onAdd={handleAddShoppingItem} darkMode={darkMode} highContrast={highContrast} />}
             {editingShoppingItem && <EditShoppingItemModal item={editingShoppingItem} onClose={() => setEditingShoppingItem(null)} onUpdate={handleUpdateShoppingItem} darkMode={darkMode} highContrast={highContrast} />}
             {isAddFromPantryModalOpen && <AddFromPantryModal products={products} onClose={() => setAddFromPantryModalOpen(false)} onAdd={handleAddFromPantry} darkMode={darkMode} highContrast={highContrast} />}
-            {isImportingNfce && <NFCeImportModal products={nfceProducts} onClose={() => setIsImportingNfce(false)} onConfirm={handleConfirmNfceImport} darkMode={darkMode} highContrast={highContrast} />}
-            {isPhotoFallbackModalOpen && (
-                <PhotoFallbackModal 
-                    onClose={() => setPhotoFallbackModalOpen(false)}
-                    onPhotoSelected={handleNFCePhotoScan}
-                    onTextImport={handleNFCeTextImport}
-                    scannedLink={scannedLink}
-                    darkMode={darkMode}
-                    highContrast={highContrast}
-                />
-            )}
+
         </div>
     );
 };
@@ -1442,191 +1262,6 @@ interface PhotoFallbackModalProps {
     highContrast?: boolean;
 }
 
-const PhotoFallbackModal: FC<PhotoFallbackModalProps> = ({ onClose, onPhotoSelected, onTextImport, scannedLink, darkMode, highContrast }) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [pastedText, setPastedText] = useState('');
-    const [activeTab, setActiveTab] = useState<'text' | 'photo'>('text');
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            onPhotoSelected(file);
-        }
-    };
-
-    const handleTextSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (pastedText.trim().length > 0) {
-            onTextImport(pastedText.trim());
-        } else {
-            alert('Por favor, cole o texto da nota fiscal.');
-        }
-    };
-
-    const bgClass = highContrast 
-        ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
-        : (darkMode ? 'bg-zinc-900 text-white' : 'bg-white text-gray-800');
-
-    const inputBgClass = highContrast
-        ? 'bg-black border-yellow-400 text-yellow-400'
-        : (darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900');
-
-    const textClass = highContrast
-        ? 'text-yellow-200'
-        : (darkMode ? 'text-zinc-400' : 'text-gray-500');
-
-    const headingClass = highContrast
-        ? 'text-yellow-400'
-        : (darkMode ? 'text-white' : 'text-zinc-900');
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4 animate-fade-in-down overflow-y-auto">
-            <input 
-                type="file" 
-                accept="image/*" 
-                capture="environment" 
-                ref={fileInputRef} 
-                className="hidden" 
-                onChange={handleFileChange} 
-            />
-            <div className={`w-full max-w-md rounded-3xl shadow-2xl p-6 ${bgClass} border ${highContrast ? 'border-yellow-400' : 'border-white/10'} max-h-[90vh] flex flex-col`}>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className={`text-lg font-black tracking-wide ${headingClass}`}>
-                        Importar Nota com IA
-                    </h3>
-                    <button 
-                        onClick={onClose} 
-                        className={`text-2xl font-bold p-1 rounded-full ${highContrast ? 'text-yellow-400 hover:text-yellow-200' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        &times;
-                    </button>
-                </div>
-
-                {/* Tabs */}
-                <div className="flex border-b border-white/10 mb-4">
-                    <button 
-                        onClick={() => setActiveTab('text')}
-                        className={`flex-1 pb-3 text-sm font-extrabold transition-all border-b-2 ${
-                            activeTab === 'text'
-                                ? (highContrast ? 'border-yellow-400 text-yellow-400' : 'border-emerald-500 text-emerald-400')
-                                : 'border-transparent text-gray-500 hover:text-gray-300'
-                        }`}
-                    >
-                        📝 Colar Texto (Bypass)
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('photo')}
-                        className={`flex-1 pb-3 text-sm font-extrabold transition-all border-b-2 ${
-                            activeTab === 'photo'
-                                ? (highContrast ? 'border-yellow-400 text-yellow-400' : 'border-emerald-500 text-emerald-400')
-                                : 'border-transparent text-gray-500 hover:text-gray-300'
-                        }`}
-                    >
-                        📸 Tirar Foto
-                    </button>
-                </div>
-
-                <div className="flex-grow overflow-y-auto pr-1 space-y-4">
-                    {activeTab === 'text' ? (
-                        <form onSubmit={handleTextSubmit} className="space-y-4">
-                            <div className={`p-4 rounded-2xl ${highContrast ? 'bg-yellow-950/20 border border-yellow-400' : (darkMode ? 'bg-zinc-800/50' : 'bg-gray-50')} text-left space-y-2`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider ${highContrast ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                                    Como burlar o bloqueio da Sefaz:
-                                </h4>
-                                <ol className={`text-xs space-y-1 list-decimal list-inside leading-relaxed ${textClass}`}>
-                                    {scannedLink && (
-                                        <li>
-                                            Clique em <strong>"Abrir Nota"</strong> abaixo para abrir o site da Sefaz no seu navegador nativo (onde ela funciona sem bloqueio).
-                                        </li>
-                                    )}
-                                    <li>No navegador, selecione todo o texto da página (<strong>Selecionar Tudo</strong>).</li>
-                                    <li>Copie e cole na caixa abaixo. A Inteligência Artificial irá encontrar todos os produtos para você!</li>
-                                </ol>
-                                
-                                {scannedLink && (
-                                    <button 
-                                        type="button"
-                                        onClick={() => window.open(scannedLink, '_blank')}
-                                        className={`w-full mt-3 py-2.5 font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-xs shadow-md border ${
-                                            highContrast 
-                                                ? 'bg-black border-yellow-400 text-yellow-400' 
-                                                : (darkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border-zinc-700' : 'bg-white hover:bg-gray-100 text-emerald-600 border-gray-200')
-                                        }`}
-                                    >
-                                        🌐 Abrir Nota no Navegador
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="space-y-1.5 text-left">
-                                <label className={`text-[10px] font-black uppercase tracking-wider ${textClass}`}>
-                                    Conteúdo da Página da Nota Fiscal
-                                </label>
-                                <textarea
-                                    value={pastedText}
-                                    onChange={(e) => setPastedText(e.target.value)}
-                                    placeholder="Cole aqui todo o texto copiado da página da nota fiscal (pode conter códigos, tabelas, etc)..."
-                                    className={`w-full h-36 px-4 py-3 rounded-2xl text-xs font-sans border focus:outline-none focus:ring-1 ${
-                                        highContrast 
-                                            ? 'focus:ring-yellow-400 focus:border-yellow-400' 
-                                            : 'focus:ring-emerald-500 focus:border-emerald-500'
-                                    } ${inputBgClass} resize-none`}
-                                />
-                            </div>
-
-                            <button 
-                                type="submit"
-                                disabled={pastedText.trim().length === 0}
-                                className={`w-full py-3.5 font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-sm uppercase tracking-wider ${
-                                    pastedText.trim().length === 0
-                                        ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700 shadow-none'
-                                        : (highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-500 text-black font-extrabold hover:bg-emerald-400')
-                                }`}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l8.982-11.795m-8.168 6.7L15 9.75M9.813 15.904L5.223 10.9m13.759-1.15l-4.59-4.82m0 0L9 9.75M14.393 4.93L9 9.75" />
-                                </svg>
-                                Importar com IA (Gemini)
-                            </button>
-                        </form>
-                    ) : (
-                        <div className="space-y-4 py-2">
-                            <div className={`p-4 rounded-2xl ${highContrast ? 'bg-yellow-950/20 border border-yellow-400' : (darkMode ? 'bg-zinc-800/50' : 'bg-gray-50')} text-center`}>
-                                <p className={`text-xs leading-relaxed ${textClass}`}>
-                                    Se você tiver a nota impressa em mãos, pode tirar uma foto bem nítida e de perto dela para nossa IA cadastrar todos os produtos automaticamente.
-                                </p>
-                            </div>
-
-                            <button 
-                                onClick={() => fileInputRef.current?.click()} 
-                                className={`w-full py-3.5 font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-sm uppercase tracking-wider ${
-                                    highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-500 text-black hover:bg-emerald-400'
-                                }`}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-                                </svg>
-                                Tirar Foto da Nota
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-white/5 flex gap-2">
-                    <button 
-                        onClick={onClose} 
-                        className={`w-full py-3 font-bold rounded-2xl border transition-all text-xs uppercase tracking-wider ${
-                            highContrast ? 'border-yellow-400 text-yellow-400' : 'border-zinc-700 text-gray-400 hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                        Fechar
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 const ModalWrapper: FC<{ children: React.ReactNode, onClose: () => void, title: string, darkMode?: boolean, highContrast?: boolean }> = ({ children, onClose, title, darkMode, highContrast }) => {
     const bgClass = highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-white' : 'bg-gradient-to-br from-red-500 to-red-700 text-white');
@@ -3151,70 +2786,32 @@ const PantryScreen: FC<{products: Product[], onNavigate: (s: Screen) => void, on
     </ScreenWrapper>
 );
 
-const NFCeImportModal: FC<{ products: NFCeProduct[], onClose: () => void, onConfirm: (selected: NFCeProduct[]) => void, darkMode?: boolean, highContrast?: boolean }> = ({ products, onClose, onConfirm, darkMode, highContrast }) => {
-    const [selectedIndices, setSelectedIndices] = useState<number[]>(products.map((_, i) => i));
-    
-    const toggleSelection = (index: number) => {
-        setSelectedIndices(prev => prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]);
-    };
-
-    const bgClass = highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-white' : 'bg-white text-gray-800');
-
+const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode') => void, onPhotoSelected: (file: File) => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, onPhotoSelected, scannedHistory, onClearHistory, darkMode, highContrast }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4 animate-fade-in-down">
-            <div className={`w-full max-w-md rounded-2xl shadow-2xl p-6 flex flex-col max-h-[90vh] ${bgClass}`}>
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Importar da Nota</h2>
-                    <button onClick={onClose} className="text-2xl">&times;</button>
-                </div>
-                
-                <p className="text-sm mb-4 opacity-80">Selecione os produtos que deseja adicionar à sua despensa:</p>
-                
-                <div className="flex-grow overflow-y-auto space-y-2 pr-1 mb-6">
-                    {products.map((p, i) => (
-                        <div 
-                            key={i} 
-                            onClick={() => toggleSelection(i)}
-                            className={`p-3 rounded-xl border transition-all cursor-pointer flex justify-between items-center ${selectedIndices.includes(i) ? (highContrast ? 'bg-yellow-400 text-black border-white' : 'bg-red-50 border-red-500') : (highContrast ? 'border-yellow-900 opacity-60' : 'border-gray-100 opacity-60')}`}
-                        >
-                            <div className="flex-grow">
-                                <p className="font-bold text-sm">{p.nome_padronizado}</p>
-                                <p className="text-xs opacity-70">{p.quantidade} {p.unidade} • {p.categoria}</p>
-                                <p className="text-[10px] italic opacity-50">{p.nome_original}</p>
-                            </div>
-                            {selectedIndices.includes(i) && <span className="text-red-500 font-bold">✓</span>}
-                        </div>
-                    ))}
-                </div>
-
-                <div className="flex gap-3">
-                    <button onClick={onClose} className={`flex-1 py-3 font-bold rounded-xl border ${highContrast ? 'border-yellow-400' : 'border-gray-300'}`}>Cancelar</button>
-                    <button 
-                        onClick={() => onConfirm(products.filter((_, i) => selectedIndices.includes(i)))}
-                        disabled={selectedIndices.length === 0}
-                        className={`flex-1 py-3 font-bold rounded-xl disabled:opacity-50 ${highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white'}`}
-                    >
-                        Importar ({selectedIndices.length})
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode' | 'qrcode' | 'nfce') => void, onPhotoScan: () => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, onPhotoScan, scannedHistory, onClearHistory, darkMode, highContrast }) => (
     <ScreenWrapper darkMode={darkMode} highContrast={highContrast}>
         <PageHeader title="Leitor QR/Código" onBack={() => onNavigate('dashboard')} darkMode={darkMode} highContrast={highContrast} />
+        <input 
+            type="file" 
+            accept="image/*" 
+            capture="environment" 
+            ref={fileInputRef} 
+            className="hidden" 
+            onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                    onPhotoSelected(e.target.files[0]);
+                }
+            }} 
+        />
         <div className="p-4 space-y-4">
              <button onClick={() => onOpenScanner('barcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><BarcodeIcon className="w-6 h-6"/> Ler Código de Barras</button>
-             <button onClick={() => onOpenScanner('qrcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ScannerIcon className="w-6 h-6"/> Ler QR Code</button>
-             <button onClick={() => onOpenScanner('nfce')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><ReceiptIcon className="w-6 h-6"/> Escanear Nota Fiscal (NFC-e)</button>
-             <button onClick={onPhotoScan} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
+             
+             <button onClick={() => fileInputRef.current?.click()} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
                  </svg>
-                 Escanear Foto de Nota (IA)
+                 Escanear Cupom Fiscal (IA)
              </button>
         </div>
         <div className="px-4 pt-2 flex justify-between items-center"><h2 className={`font-bold ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-gray-400' : 'text-gray-600')}`}>Últimos Escaneados</h2>{scannedHistory.length > 0 && <button onClick={onClearHistory} className={`text-xs font-bold ${highContrast ? 'text-yellow-400' : 'text-red-500'}`}>Limpar</button>}</div>
@@ -3238,7 +2835,8 @@ const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: 
         </div>
         <BottomNav activeScreen="scanner" onNavigate={onNavigate} darkMode={darkMode} highContrast={highContrast} />
     </ScreenWrapper>
-);
+    );
+};
 
 const BottomNav: FC<{ activeScreen: Screen, onNavigate: (s: Screen) => void, darkMode?: boolean, highContrast?: boolean }> = ({ activeScreen, onNavigate, darkMode, highContrast }) => {
     const navClass = highContrast ? 'bg-black border-t-2 border-yellow-400' : (darkMode ? 'bg-zinc-900 border-t border-zinc-800' : 'bg-gradient-to-r from-yellow-200 via-yellow-100 to-red-50 border-t-2 border-white/50');
