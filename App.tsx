@@ -1271,12 +1271,14 @@ const ModalWrapper: FC<{ children: React.ReactNode, onClose: () => void, title: 
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 animate-fade-in-down">
-            <div className={`w-full max-w-sm rounded-2xl shadow-2xl p-6 relative ${bgClass}`}>
-                <div className="flex justify-between items-center mb-6">
+            <div className={`w-full max-w-sm max-h-[90vh] flex flex-col rounded-2xl shadow-2xl p-6 relative ${bgClass}`}>
+                <div className="flex justify-between items-center mb-6 flex-shrink-0">
                     <h2 className="text-xl font-bold">{title}</h2>
                     <button onClick={onClose} className={`text-2xl font-bold ${closeBtnClass}`}>&times;</button>
                 </div>
-                {children}
+                <div className="flex-1 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    {children}
+                </div>
             </div>
         </div>
     );
@@ -1403,7 +1405,7 @@ const AddFromPantryModal: FC<{ products: Product[], onClose: () => void, onAdd: 
     return (
         <ModalWrapper onClose={onClose} title="Adicionar da Despensa" darkMode={darkMode} highContrast={highContrast}>
             <div className="mb-4"><p className="text-sm opacity-80">Selecione os itens que deseja adicionar à lista de compras:</p></div>
-            <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1 mb-4">
+            <div className="space-y-2 pr-1 mb-4">
                 {products.length === 0 ? <p className="text-center opacity-60 py-4">Sua despensa está vazia.</p> : products.map(product => <div key={product.id} onClick={() => toggleSelection(product.id)} className={`p-3 rounded-lg flex justify-between items-center cursor-pointer transition-all border ${selectedIds.includes(product.id) ? (highContrast ? 'bg-yellow-400 text-black border-white' : 'bg-white text-red-600 border-white') : (highContrast ? 'bg-transparent border-yellow-400 hover:bg-yellow-900' : 'bg-white/10 border-transparent hover:bg-white/20')}`}><div><p className="font-bold">{product.name}</p><p className="text-xs opacity-80">{product.unit} un • {product.quantity}</p></div>{selectedIds.includes(product.id) && <span className="text-lg">✅</span>}</div>)}
             </div>
             <button onClick={handleSubmit} disabled={selectedIds.length === 0} className={`w-full py-3 font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${highContrast ? 'bg-yellow-400 text-black' : 'bg-white text-red-600'}`}>Adicionar Selecionados ({selectedIds.length})</button>
@@ -1729,7 +1731,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                     </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                <form onSubmit={handleSubmit} className="space-y-4 pr-2">
                     <div><label className="text-sm font-semibold">Nome do Produto</label><input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Arroz Integral" className={inputClass} /></div>
                     <div><label className="text-sm font-semibold">Vencimento</label><input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} className={inputClass} /></div>
                     <div className="grid grid-cols-2 gap-4">
@@ -2041,7 +2043,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                     <div className="flex-1 font-bold text-lg leading-tight truncate self-center">{name || "Produto Existente"}</div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                <form onSubmit={handleSubmit} className="space-y-4 pr-2">
                     <div><label className="text-sm font-semibold">Nome do Produto</label><input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} /></div>
                     <div><label className="text-sm font-semibold">Categoria</label><div className="grid grid-cols-3 gap-2 mt-1">{(Object.keys(CATEGORIES) as CategoryKey[]).map(key => <CategoryButton key={key} cKey={key} selected={category === key} onClick={() => setCategory(key)} />)}</div></div>
                     <div><label className="text-sm font-semibold">Data de Validade</label><input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} className={inputClass} /></div>
@@ -2137,7 +2139,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
     
     return (
         <ModalWrapper onClose={onClose} title="Adicionar à Lista" darkMode={darkMode} highContrast={highContrast}>
-             <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+             <form onSubmit={handleSubmit} className="space-y-4 pr-2">
                 <div>
                     <label className="text-sm font-semibold">Nome do Item</label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Leite Integral" className={inputClass} />
@@ -2244,7 +2246,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
     
     return (
         <ModalWrapper onClose={onClose} title="Editar Item" darkMode={darkMode} highContrast={highContrast}>
-             <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+             <form onSubmit={handleSubmit} className="space-y-4 pr-2">
                 <div>
                     <label className="text-sm font-semibold">Nome do Item</label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
