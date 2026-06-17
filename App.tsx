@@ -222,7 +222,9 @@ function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch
 }
 
 const getGeminiClient = () => {
-    const key = process.env.GEMINI_API_KEY || firebaseConfig.apiKey || '';
+    // Tenta pegar a chave específica do Gemini, senão usa a chave padrão do Firebase
+    const key = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) 
+                || firebaseConfig.apiKey || '';
     return new GoogleGenAI({ apiKey: key });
 };
 
