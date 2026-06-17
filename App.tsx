@@ -647,6 +647,10 @@ const App: React.FC = () => {
     const handleLogout = async () => {
         try {
             await signOut(auth);
+            // Clear local states so they don't leak to the next login
+            setProducts([]);
+            setShoppingList([]);
+            setScannedHistory([]);
             setScreen('welcome');
         } catch (error) {
             alert("Erro ao sair. Tente novamente.");
