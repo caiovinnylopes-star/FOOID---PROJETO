@@ -2965,9 +2965,10 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
 
                 const newRecipes = await Promise.all(newRecipesRaw.map(async (r: any, index: number) => {
                     // Generate AI Image for the recipe using the precise prompt from Gemini
-                    const basePrompt = r.imagePrompt || `${r.title} food`;
+                    const basePrompt = r.imagePrompt || `${r.title} food plate`;
                     const imagePrompt = encodeURIComponent(basePrompt.replace(/[^a-zA-Z0-9 ]/g, ""));
-                    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=450&nologo=true`;
+                    const seed = Math.floor(Math.random() * 1000000);
+                    const imageUrl = `https://pollinations.ai/p/${imagePrompt}?width=800&height=450&nologo=true&seed=${seed}`;
                     
                     return {
                         id: Date.now() + index + Math.floor(Math.random() * 1000),
@@ -3009,9 +3010,9 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                     {isGenerating ? 'O Chef está pensando...' : 'Sugerir com meus Ingredientes'}
                 </button>
             </div>
-            <div className="flex gap-2 px-4 py-3 mt-1 overflow-x-auto scrollbar-hide"><button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'all' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Todas</button><button onClick={() => setFilter('quick')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'quick' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Rápidas</button><button onClick={() => setFilter('healthy')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'healthy' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Saudáveis</button></div>
-            <div className="flex-grow overflow-y-auto px-4 pb-6 pt-2">
-                <div className="flex flex-col gap-6">
+            <div className="flex gap-2 px-4 py-2 mt-2 mb-2 overflow-x-auto scrollbar-hide flex-shrink-0"><button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'all' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Todas</button><button onClick={() => setFilter('quick')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'quick' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Rápidas</button><button onClick={() => setFilter('healthy')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'healthy' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Saudáveis</button></div>
+            <div className="flex-grow overflow-y-auto px-4 pb-6 relative z-0">
+                <div className="flex flex-col gap-6 pt-2">
                     {filteredRecipes.map(recipe => (
                         <div 
                             key={recipe.id} 
@@ -3023,7 +3024,7 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                             }`}
                         >
                             {/* Card Image Area (Fixed height) */}
-                            <div className="w-full h-48 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
+                            <div className="w-full h-48 flex-shrink-0 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
                                  <img 
                                      src={recipe.image} 
                                      alt={recipe.title} 
