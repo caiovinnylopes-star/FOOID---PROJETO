@@ -1037,7 +1037,7 @@ Caso não encontre produtos na imagem, retorne:
 Não dê explicações ou textos fora do JSON.`;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.5-flash-lite',
                 contents: {
                     parts: [
                         { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } },
@@ -1548,7 +1548,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 "storage": string (one of: fridge, freezer, fruit-bowl, pantry),
                 "expiryDate": string (YYYY-MM-DD, calcular data futura baseada no texto ex: 'vence em 20 dias' ou 'vence dia 15 de maio')
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-lite', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -1588,7 +1588,7 @@ const AddProductModal: FC<{ onClose: () => void, onAdd: (product: Omit<Product, 
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-2.5-flash-lite',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -1874,7 +1874,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 "storage": string,
                 "expiryDate": string
             }`;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-lite', contents: prompt, config: { responseMimeType: "application/json" } });
             if (response.text) {
                 const data = JSON.parse(response.text);
                 if (data.name) setName(data.name);
@@ -1911,7 +1911,7 @@ const EditProductModal: FC<{ product: Product, onClose: () => void, onUpdate: (p
                 }`;
 
                 const result = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-2.5-flash-lite',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
@@ -2106,7 +2106,7 @@ const AddShoppingItemModal: FC<{ onClose: () => void, onAdd: (item: Omit<Shoppin
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.5-flash-lite',
                 contents: prompt,
                 config: {
                     tools: [{ googleSearch: {} }],
@@ -2213,7 +2213,7 @@ const EditShoppingItemModal: FC<{ item: ShoppingItem, onClose: () => void, onUpd
             Retorne APENAS o valor numérico (ex: 15.90). Sem texto.`;
             
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.5-flash-lite',
                 contents: prompt,
                 config: {
                     tools: [{ googleSearch: {} }],
@@ -2909,7 +2909,7 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
 IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de código markdown.`;
 
             const response = await ai.models.generateContent({ 
-                model: 'gemini-2.5-flash', 
+                model: 'gemini-2.5-flash-lite', 
                 contents: prompt, 
                 config: { 
                     responseMimeType: "application/json" 
