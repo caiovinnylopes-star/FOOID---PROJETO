@@ -2992,7 +2992,61 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
             }
         } catch (e) {
             console.error("Erro ao gerar receitas:", e);
-            alert("Erro ao gerar receitas. Certifique-se de que sua chave de API do Gemini é válida ou tente novamente mais tarde.");
+            
+            // Fallback elegante caso a API falhe (ex: limite de requisições excedido)
+            const fallbackRecipes: Recipe[] = [
+                {
+                    id: Date.now() + 1,
+                    title: 'Mexidão Especial da Casa',
+                    subtitle: 'Uma combinação deliciosa e rápida com o que você já tem!',
+                    prepTime: '15 min',
+                    difficulty: 'Fácil',
+                    ingredients: pantryProducts.slice(0, 5).map(p => `${p.quantity || 'A gosto'} de ${p.name}`),
+                    instructions: [
+                        'Separe os ingredientes principais.',
+                        'Refogue em uma frigideira grande com um fio de azeite ou óleo.',
+                        'Tempere a gosto com sal, pimenta e ervas.',
+                        'Misture tudo muito bem e sirva quente.'
+                    ],
+                    category: 'quick',
+                    image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=800&auto=format&fit=crop&q=60'
+                },
+                {
+                    id: Date.now() + 2,
+                    title: 'Refeição Leve e Saudável',
+                    subtitle: 'Perfeita para comer bem sem pesar, aproveitando seus itens.',
+                    prepTime: '20 min',
+                    difficulty: 'Fácil',
+                    ingredients: pantryProducts.slice(0, 4).map(p => `${p.quantity || 'A gosto'} de ${p.name}`),
+                    instructions: [
+                        'Cozinhe ou asse os ingredientes que precisarem de preparo.',
+                        'Monte em uma tigela bonita.',
+                        'Adicione um toque de limão ou azeite extra virgem.',
+                        'Aproveite sua refeição saudável!'
+                    ],
+                    category: 'healthy',
+                    image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&auto=format&fit=crop&q=60'
+                },
+                {
+                    id: Date.now() + 3,
+                    title: 'Tigela Conforto do Chef',
+                    subtitle: 'Comida de verdade para aquecer o coração e saciar a fome.',
+                    prepTime: '25 min',
+                    difficulty: 'Médio',
+                    ingredients: pantryProducts.map(p => `${p.quantity || 'A gosto'} de ${p.name}`),
+                    instructions: [
+                        'Prepare a base da refeição.',
+                        'Incorpore os demais ingredientes com temperos de sua preferência.',
+                        'Deixe apurar os sabores em fogo baixo por alguns minutos.',
+                        'Sirva em seguida.'
+                    ],
+                    category: 'all',
+                    image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=800&auto=format&fit=crop&q=60'
+                }
+            ];
+            
+            setRecipes(prev => [...fallbackRecipes, ...prev]);
+            alert("✨ Receitas offline criadas! (A IA estava indisponível no momento)");
         } finally {
             setIsGenerating(false);
         }
