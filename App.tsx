@@ -1135,7 +1135,7 @@ Não dê explicações ou textos fora do JSON.`;
             mainContent = <PantryScreen {...commonProps} products={products} onAddClick={() => setAddProductModalOpen(true)} onEditProduct={setEditingProduct} onDeleteProduct={handleDeleteProduct} />;
             break;
         case 'scanner':
-            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} />;
+            mainContent = <ScannerLandingScreen {...commonProps} scannedHistory={scannedHistory} onClearHistory={handleClearHistory} onOpenScanner={(mode) => { setScannerMode(mode); setScannerOpen(true); }} onPhotoSelected={handleNFCePhotoScan} />;
             break;
         case 'notifications':
             mainContent = <NotificationsScreen {...commonProps} notifications={notifications} onMarkAllRead={handleMarkAllNotificationsRead} />;
@@ -1198,7 +1198,7 @@ Não dê explicações ou textos fora do JSON.`;
                 scannerMode === 'barcode' ? (
                     <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
                 ) : (
-                    <QRScannerComponent onScanSuccess={handleScanSuccess} onPhotoCapture={handleNFCePhotoScan} onClose={() => setScannerOpen(false)} />
+                    <QRScannerComponent onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
                 )
             )}
             {isFetchingScannedProduct && <LoadingSpinner message="Buscando dados do produto..." />}
@@ -2791,19 +2791,51 @@ const PantryScreen: FC<{products: Product[], onNavigate: (s: Screen) => void, on
     </ScreenWrapper>
 );
 
-const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode' | 'qr') => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, scannedHistory, onClearHistory, darkMode, highContrast }) => {
+const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode') => void, onPhotoSelected: (file: File) => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, onPhotoSelected, scannedHistory, onClearHistory, darkMode, highContrast }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const galleryInputRef = useRef<HTMLInputElement>(null);
     return (
     <ScreenWrapper darkMode={darkMode} highContrast={highContrast}>
         <PageHeader title="Leitor QR/Código" onBack={() => onNavigate('dashboard')} darkMode={darkMode} highContrast={highContrast} />
+        <input 
+            type="file" 
+            accept="image/*" 
+            capture="environment" 
+            ref={fileInputRef} 
+            className="hidden" 
+            onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                    onPhotoSelected(e.target.files[0]);
+                }
+            }} 
+        />
+        <input 
+            type="file" 
+            accept="image/*" 
+            ref={galleryInputRef} 
+            className="hidden" 
+            onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                    onPhotoSelected(e.target.files[0]);
+                }
+            }} 
+        />
         <div className="p-4 space-y-4">
              <button onClick={() => onOpenScanner('barcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><BarcodeIcon className="w-6 h-6"/> Ler Código de Barras</button>
              
-             <button onClick={() => onOpenScanner('qr')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
+             <button onClick={() => fileInputRef.current?.click()} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
                  </svg>
-                 Abrir Leitor Inteligente (IA & QR)
+                 Tirar Foto da Nota (Câmera)
+             </button>
+
+             <button onClick={() => galleryInputRef.current?.click()} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-blue-900/30 text-blue-400 border border-blue-500/20' : 'bg-blue-50 text-blue-700 border border-blue-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                 </svg>
+                 Importar Foto da Galeria
              </button>
         </div>
         <div className="px-4 pt-2 flex justify-between items-center"><h2 className={`font-bold ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-gray-400' : 'text-gray-600')}`}>Últimos Escaneados</h2>{scannedHistory.length > 0 && <button onClick={onClearHistory} className={`text-xs font-bold ${highContrast ? 'text-yellow-400' : 'text-red-500'}`}>Limpar</button>}</div>
