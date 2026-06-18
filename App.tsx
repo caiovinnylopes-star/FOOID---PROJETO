@@ -2935,7 +2935,7 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
     "ingredients": ["ingrediente 1", "ingrediente 2", ...],
     "instructions": ["Passo 1 do preparo", "Passo 2 do preparo", ...],
     "category": "quick" ou "healthy" ou "all",
-    "imageKeywords": "2 English keywords representing the dish, separated by comma (e.g. 'banana,cake' or 'pasta,tomato')"
+    "imagePrompt": "2-3 English words of the main dish (e.g. 'banana cake' or 'steak fries')"
   }
 ]
 
@@ -2964,11 +2964,13 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                 }
 
                 const newRecipes = await Promise.all(newRecipesRaw.map(async (r: any, index: number) => {
-                    // Use LoremFlickr for fast, realistic real food images based on precise tags
-                    const keywords = r.imageKeywords || 'food,plate';
-                    const cleanKeywords = encodeURIComponent(keywords.replace(/[^a-zA-Z0-9,]/g, "").toLowerCase());
+                    // Generate AI Image for the recipe using Pollinations with a bulletproof prompt
+                    const basePrompt = r.imagePrompt || r.title || 'delicious food';
+                    // We remove special characters but keep spaces for a valid prompt
+                    const safePrompt = basePrompt.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+                    const imagePrompt = encodeURIComponent(`${safePrompt} delicious food photography`);
                     const seed = Math.floor(Math.random() * 1000000);
-                    const imageUrl = `https://loremflickr.com/800/450/${cleanKeywords}/all?lock=${seed}`;
+                    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=450&nologo=true&seed=${seed}`;
                     
                     return {
                         id: Date.now() + index + Math.floor(Math.random() * 1000),
