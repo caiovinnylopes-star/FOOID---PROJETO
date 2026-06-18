@@ -222,10 +222,23 @@ function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch
 }
 
 const getGeminiClient = () => {
-    // Tenta pegar a chave específica do Gemini, senão usa a chave dedicada fornecida pelo usuário
-    const key = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) 
-                || 'AIzaSyCmTUHoG_0R1ZbxOa12a2xb2cbGePJxnBg';
-    return new GoogleGenAI({ apiKey: key });
+    // A chave antiga foi vazada no GitHub e revogada pelo Google.
+    // Agora pedimos ao usuário para inserir a chave localmente, salvando no navegador.
+    let key = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY);
+    
+    // Ignora chaves vazias ou a chave velha vazada
+    if (!key || key === 'AIzaSyCmTUHoG_0R1ZbxOa12a2xb2cbGePJxnBg') {
+        key = localStorage.getItem('GEMINI_USER_KEY');
+        if (!key || key === 'AIzaSyCmTUHoG_0R1ZbxOa12a2xb2cbGePJxnBg') {
+            key = window.prompt("⚠️ CHAVE REVOGADA PELO GOOGLE!\nComo a chave anterior ficou visível no código, o Google a bloqueou por segurança.\n\nPor favor, acesse o Google AI Studio, GERE UMA CHAVE NOVA, e cole aqui para continuar (ela ficará salva apenas no seu celular):");
+            if (key) {
+                localStorage.setItem('GEMINI_USER_KEY', key);
+            } else {
+                throw new Error("Chave da API não fornecida. Operação cancelada.");
+            }
+        }
+    }
+    return new GoogleGenAI({ apiKey: key as string });
 };
 
 const fetchWithRetry = async (url: string, retries = 2, delay = 1000): Promise<Response> => {
