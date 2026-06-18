@@ -3,11 +3,13 @@ import QrScanner from 'qr-scanner';
 
 interface QRScannerComponentProps {
     onScanSuccess: (value: string) => void;
+    onPhotoCapture?: (file: File) => void;
     onClose: () => void;
 }
 
-const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, onClose }) => {
+const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, onPhotoCapture, onClose }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const scannerRef = useRef<QrScanner | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -15,7 +17,6 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
     const [loading, setLoading] = useState(true);
     const [hasTorch, setHasTorch] = useState(false);
     const [isTorchOn, setIsTorchOn] = useState(false);
-    const [manualCode, setManualCode] = useState('');
     const [detectedCode, setDetectedCode] = useState<string | null>(null);
     
     // Zoom State
@@ -44,13 +45,8 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
         playBeep();
         setDetectedCode(code);
         
-        // Stop scanner to prevent multiple detections
         if (scannerRef.current) {
-            try {
-                scannerRef.current.stop();
-            } catch (e) {
-                console.warn("Error stopping scanner on detection:", e);
-            }
+            try { scannerRef.current.stop(); } catch (e) {}
         }
         
         if (videoRef.current) {
@@ -72,7 +68,6 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                 setLoading(true);
                 setError(null);
 
-                // Instancia o QrScanner da Nimiq
                 const qrScanner = new QrScanner(
                     videoElement,
                     (result) => {
@@ -87,9 +82,7 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                         highlightScanRegion: true,
                         highlightCodeOutline: true,
                         maxScansPerSecond: 15,
-                        // Configurações ideais para focar códigos densos
                         calculateScanRegion: (video) => {
-                            // Aumenta o tamanho da área de escaneamento para ler QR codes densos ou distantes
                             const smallestDimension = Math.min(video.videoWidth, video.videoHeight);
                             const scanRegionSize = Math.round(smallestDimension * 0.75);
                             return {
@@ -104,7 +97,6 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
 
                 scannerRef.current = qrScanner;
 
-                // Inicia o leitor
                 await qrScanner.start();
                 
                 if (isUnmounted) {
@@ -114,13 +106,11 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
 
                 setLoading(false);
 
-                // Verifica se suporta Lanterna (Flash)
                 const hasFlash = await qrScanner.hasFlash();
                 if (!isUnmounted) {
                     setHasTorch(hasFlash);
                 }
 
-                // Configura Zoom se disponível no track de vídeo
                 const stream = videoElement.srcObject as MediaStream;
                 if (stream) {
                     const track = stream.getVideoTracks()[0];
@@ -130,8 +120,6 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                             const zoomCap = (capabilities as any).zoom;
                             setZoomSupported(true);
                             setZoomMinMax({ min: zoomCap.min || 1, max: zoomCap.max || 5 });
-                            // Inicia no zoom padrão (1.0x ou o mínimo suportado) para que o hardware do celular use o foco automático nativo ideal.
-                            // IMPORTANTE: NÃO aplicamos applyConstraints no startup para evitar travar ou desativar o mecanismo nativo de foco automático.
                             const startZoom = zoomCap.min || 1;
                             setCurrentZoom(startZoom);
                         }
@@ -197,36 +185,45 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
         }
     };
 
-    const handleManualSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (manualCode.trim().length > 0) {
-            handleDetection(manualCode.trim());
+    const captureFrame = () => {
+        if (!videoRef.current || !canvasRef.current || !onPhotoCapture) return;
+        
+        playBeep();
+        
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+                    
+                    if (scannerRef.current) {
+                        try { scannerRef.current.stop(); } catch (e) {}
+                    }
+                    video.pause();
+                    
+                    onPhotoCapture(file);
+                    onClose();
+                }
+            }, 'image/jpeg', 0.95);
         }
     };
 
-    const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleGallerySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) return;
-
-        try {
-            setLoading(true);
-            // QrScanner permite escanear um arquivo de imagem diretamente!
-            const result = await QrScanner.scanImage(file, {
-                returnDetailedScanResult: true
-            });
-            
-            if (result && result.data) {
-                handleDetection(result.data);
-            } else {
-                setError("Nenhum QR Code legível foi detectado nesta imagem. Tente tirar uma foto mais nítida de perto.");
-            }
-        } catch (err) {
-            console.error("Erro ao escanear imagem estática:", err);
-            setError("Não foi possível detectar um QR Code nesta foto. Certifique-se de que a imagem está bem focada e iluminada.");
-        } finally {
-            setLoading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+        if (!file || !onPhotoCapture) return;
+        
+        if (scannerRef.current) {
+            try { scannerRef.current.stop(); } catch (e) {}
         }
+        
+        onPhotoCapture(file);
+        onClose();
     };
 
     return (
@@ -234,14 +231,14 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
             <input 
                 type="file" 
                 accept="image/*" 
-                capture="environment" 
                 ref={fileInputRef} 
                 className="hidden" 
-                onChange={handlePhotoCapture} 
+                onChange={handleGallerySelect} 
             />
+            <canvas ref={canvasRef} className="hidden" />
 
             {/* Top Bar - Glassmorphism style */}
-            <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-30 bg-gradient-to-b from-black/90 to-transparent">
+            <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-30 bg-gradient-to-b from-black/90 to-transparent pt-safe">
                 <button 
                     onClick={onClose} 
                     className="text-white p-2.5 rounded-full bg-white/10 backdrop-blur-md active:bg-white/30 transition-colors border border-white/10"
@@ -254,10 +251,10 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                 
                 <div className="flex flex-col items-center">
                     <span className="text-white font-black tracking-widest text-sm uppercase drop-shadow-md">
-                        Leitor QR Super-Foco
+                        Leitor Inteligente
                     </span>
                     <span className="text-[10px] text-emerald-400 font-bold tracking-wider uppercase animate-pulse">
-                        Modo WebAssembly Ativo
+                        Auto-Foco IA
                     </span>
                 </div>
 
@@ -283,9 +280,9 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
             {/* Camera Viewport */}
             <div className="relative flex-grow bg-black overflow-hidden flex items-center justify-center">
                 {loading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-955 z-30 gap-4">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 z-30 gap-4">
                         <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin"></div>
-                        <p className="text-gray-400 text-xs font-bold tracking-widest uppercase">Iniciando Câmera Ultra-Foco...</p>
+                        <p className="text-gray-400 text-xs font-bold tracking-widest uppercase">Iniciando Câmera...</p>
                     </div>
                 )}
                 
@@ -325,17 +322,6 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                                 </svg>
                                 Recarregar Página
                             </button>
-
-                            <button 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 border border-white/10"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-emerald-400">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-                                </svg>
-                                Escolher da Galeria
-                            </button>
                         </div>
                     </div>
                 ) : (
@@ -348,114 +334,64 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                     />
                 )}
 
-                {/* Laser/Sci-fi visual scanner target */}
+                {/* Custom Overlay for Camera UI */}
                 {!loading && !error && !detectedCode && (
-                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
-                        {/* Custom visual target frame */}
-                        <div className="relative w-72 h-72 border border-white/20 rounded-3xl shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] overflow-hidden">
-                            {/* Scanning neon laser effect */}
-                            <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_rgba(52,211,153,0.8)] animate-scan-laser"></div>
+                    <div className="absolute inset-0 pointer-events-none flex flex-col justify-end">
+                        
+                        {/* Zoom Controller */}
+                        {zoomSupported && (
+                            <div className="pointer-events-auto absolute bottom-36 left-1/2 transform -translate-x-1/2 w-48 z-20 bg-black/50 px-4 py-2 rounded-full backdrop-blur-md border border-white/20">
+                                <input 
+                                    type="range" 
+                                    min={zoomMinMax.min} 
+                                    max={zoomMinMax.max} 
+                                    step={0.1} 
+                                    value={currentZoom}
+                                    onChange={handleZoomChange}
+                                    className="w-full h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-white"
+                                />
+                            </div>
+                        )}
+
+                        {/* Native Camera Style Bottom Bar */}
+                        <div className="w-full bg-gradient-to-t from-black via-black/80 to-transparent pt-16 pb-10 px-8 flex justify-between items-center pointer-events-auto pb-safe">
                             
-                            {/* Target corners */}
-                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-2xl"></div>
-                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-2xl"></div>
-                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-2xl"></div>
-                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-2xl"></div>
-                        </div>
+                            {/* Gallery Button */}
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-14 h-14 bg-zinc-800/80 rounded-full border border-zinc-600 flex items-center justify-center active:scale-90 transition-transform"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7 text-white">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                </svg>
+                            </button>
 
-                        <div className="mt-8 bg-zinc-900/90 border border-emerald-500/20 px-5 py-3 rounded-2xl backdrop-blur-md shadow-xl text-center max-w-[280px]">
-                            <p className="text-yellow-400 font-extrabold text-xs mb-1 uppercase tracking-widest animate-pulse">
-                                Câmera Auto-Foco
-                            </p>
-                            <p className="text-gray-300 text-[11px] font-medium leading-relaxed">
-                                Aproxime ou afaste a câmera da nota fiscal lentamente para obter foco automático instantâneo.
-                            </p>
-                        </div>
-                    </div>
-                )}
+                            {/* Capture Button */}
+                            {onPhotoCapture && (
+                                <button 
+                                    onClick={captureFrame}
+                                    className="w-20 h-20 bg-transparent border-4 border-white rounded-full flex items-center justify-center p-1 active:scale-90 transition-transform"
+                                >
+                                    <div className="w-full h-full bg-white rounded-full"></div>
+                                </button>
+                            )}
 
-                {/* Zoom Controller - Standard premium slider */}
-                {zoomSupported && !loading && !error && !detectedCode && (
-                    <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 w-64 z-20 bg-zinc-900/80 px-4 py-3 rounded-full backdrop-blur-md border border-white/10" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-between text-white text-[10px] font-black tracking-widest mb-1.5 px-1">
-                            <span>1.0x</span>
-                            <span className="text-emerald-400 uppercase">AJUSTE DE ZOOM</span>
-                            <span>{zoomMinMax.max.toFixed(1)}x</span>
+                            {/* Spacer to keep Capture Button centered */}
+                            <div className="w-14 h-14"></div>
+                            
                         </div>
-                        <input 
-                            type="range" 
-                            min={zoomMinMax.min} 
-                            max={zoomMinMax.max} 
-                            step={0.1} 
-                            value={currentZoom}
-                            onChange={handleZoomChange}
-                            className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-emerald-400"
-                        />
                     </div>
                 )}
             </div>
 
-            {/* Bottom Panel - Options & Manual Entry */}
-            <div className="bg-zinc-950 p-4 pb-8 z-20 border-t border-white/5 flex flex-col gap-4">
-                <div className="flex gap-2 max-w-md mx-auto w-full justify-center">
-                    <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="bg-zinc-900 border border-white/10 text-white font-bold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 text-sm shadow-md active:scale-95 transition-all w-1/2"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-emerald-400">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-                        </svg>
-                        Escanear Foto
-                    </button>
-                    
-                    <button 
-                        onClick={onClose}
-                        className="bg-zinc-900 border border-white/10 text-white/70 font-medium py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 text-sm w-1/2"
-                    >
-                        Cancelar
-                    </button>
-                </div>
-
-                <form onSubmit={handleManualSubmit} className="flex gap-2 max-w-md mx-auto w-full">
-                    <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">⌨️</span>
-                        <input 
-                            type="text" 
-                            value={manualCode}
-                            onChange={(e) => setManualCode(e.target.value)}
-                            placeholder="Digitar código manualmente..."
-                            className="w-full pl-10 pr-4 py-3.5 bg-zinc-900 border border-white/10 text-white placeholder-gray-500 rounded-2xl focus:outline-none focus:border-emerald-500/50 font-mono text-sm transition-all shadow-inner"
-                        />
-                    </div>
-                    <button 
-                        type="submit"
-                        className="bg-emerald-500 text-black font-black px-6 py-3.5 rounded-2xl shadow-lg hover:bg-emerald-400 active:scale-95 transition-all text-sm uppercase tracking-wider"
-                    >
-                        OK
-                    </button>
-                </form>
-            </div>
-
-            {/* Custom animations styled in CSS in JS */}
             <style>{`
-                @keyframes scanlaser {
-                    0% { top: 0%; opacity: 0.1; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0.1; }
-                }
-                .animate-scan-laser {
-                    animation: scanlaser 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-                }
-                /* Custom styles to hide qr-scanner's overlay if highlightScanRegion is enabled */
                 .qr-scanner-highlight {
                     border: none !important;
                     box-shadow: none !important;
                 }
                 .qr-scanner-outline {
-                    stroke: #34d399 !important;
-                    stroke-width: 4px !important;
+                    stroke: #facc15 !important;
+                    stroke-width: 5px !important;
                 }
             `}</style>
         </div>
@@ -463,3 +399,4 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
 };
 
 export default QRScannerComponent;
+
