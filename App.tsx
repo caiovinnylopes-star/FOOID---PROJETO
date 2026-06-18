@@ -2920,7 +2920,7 @@ const RecipesScreen: FC<{recipes: Recipe[], pantryProducts: Product[], setRecipe
         setIsGenerating(true);
         try {
             const ai = getGeminiClient();
-            const ingredientList = pantryProducts.map(p => p.name).join(', ');
+            const ingredientList = pantryProducts.map(p => `${p.quantity || 'quantidade disponível'} de ${p.name}`).join(', ');
             
             const prompt = `Você é um Master Chef renomado. Crie 3 receitas criativas e saborosas baseadas PRINCIPALMENTE nos seguintes ingredientes da despensa do usuário: ${ingredientList}.
 Você pode assumir que o usuário possui ingredientes básicos de despensa (sal, água, óleo, etc.).
@@ -2934,7 +2934,8 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
     "difficulty": "Fácil" ou "Médio" ou "Difícil",
     "ingredients": ["ingrediente 1", "ingrediente 2", ...],
     "instructions": ["Passo 1 do preparo", "Passo 2 do preparo", ...],
-    "category": "quick" ou "healthy" ou "all"
+    "category": "quick" ou "healthy" ou "all",
+    "imagePrompt": "A highly detailed English prompt for an AI image generator to create a realistic photo of this dish (e.g. 'A delicious plate of <name>, professional food photography, cinematic lighting, 4k')"
   }
 ]
 
@@ -2963,9 +2964,10 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                 }
 
                 const newRecipes = await Promise.all(newRecipesRaw.map(async (r: any, index: number) => {
-                    // Generate AI Image for the recipe
-                    const imagePrompt = encodeURIComponent(`${r.title} food photography delicious high resolution`);
-                    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=600&nologo=true`;
+                    // Generate AI Image for the recipe using the precise prompt from Gemini
+                    const basePrompt = r.imagePrompt || `${r.title} food photography delicious high resolution`;
+                    const imagePrompt = encodeURIComponent(basePrompt);
+                    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=1024&height=576&nologo=true`;
                     
                     return {
                         id: Date.now() + index + Math.floor(Math.random() * 1000),
@@ -3014,7 +3016,7 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                         <div 
                             key={recipe.id} 
                             onClick={() => setSelectedRecipe(recipe)} 
-                            className={`rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.06)] cursor-pointer transform transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_12px_40px_rgba(0,0,0,0.12)] flex flex-col h-full border ${
+                            className={`rounded-3xl overflow-hidden shadow-md cursor-pointer transform transition-all duration-300 hover:scale-[1.02] hover:shadow-xl flex flex-col h-full border w-full max-w-sm mx-auto sm:max-w-none ${
                                 highContrast 
                                     ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
                                     : (darkMode ? 'bg-zinc-800 border-zinc-700/50' : 'bg-white border-gray-100')
