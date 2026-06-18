@@ -2935,7 +2935,7 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
     "ingredients": ["ingrediente 1", "ingrediente 2", ...],
     "instructions": ["Passo 1 do preparo", "Passo 2 do preparo", ...],
     "category": "quick" ou "healthy" ou "all",
-    "imagePrompt": "Short English prompt for an AI image generator to create a photo of this dish (max 80 chars, only letters and spaces)"
+    "imageKeywords": "2 English keywords representing the dish, separated by comma (e.g. 'banana,cake' or 'pasta,tomato')"
   }
 ]
 
@@ -2964,11 +2964,11 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                 }
 
                 const newRecipes = await Promise.all(newRecipesRaw.map(async (r: any, index: number) => {
-                    // Generate AI Image for the recipe using the precise prompt from Gemini
-                    const basePrompt = r.imagePrompt || `${r.title} food plate`;
-                    const imagePrompt = encodeURIComponent(basePrompt.replace(/[^a-zA-Z0-9 ]/g, ""));
+                    // Use LoremFlickr for fast, realistic real food images based on precise tags
+                    const keywords = r.imageKeywords || 'food,plate';
+                    const cleanKeywords = encodeURIComponent(keywords.replace(/[^a-zA-Z0-9,]/g, "").toLowerCase());
                     const seed = Math.floor(Math.random() * 1000000);
-                    const imageUrl = `https://pollinations.ai/p/${imagePrompt}?width=800&height=450&nologo=true&seed=${seed}`;
+                    const imageUrl = `https://loremflickr.com/800/450/${cleanKeywords}/all?lock=${seed}`;
                     
                     return {
                         id: Date.now() + index + Math.floor(Math.random() * 1000),
