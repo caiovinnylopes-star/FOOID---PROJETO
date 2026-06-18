@@ -297,6 +297,7 @@ const App: React.FC = () => {
     const [tempScannedData, setTempScannedData] = useState<any>(null);
 
     const [scannedLink, setScannedLink] = useState<string | null>(null);
+    const [nfceRedirectUrl, setNfceRedirectUrl] = useState<string | null>(null);
 
     // PWA Install Prompt State
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -858,81 +859,8 @@ const App: React.FC = () => {
     };
 
     const handleNFCeScan = async (url: string) => {
-        setIsFetchingScannedProduct(true);
-        try {
-            // Fetch HTML via proxy
-            let htmlContent = "";
-            try {
-                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-                const res = await fetch(proxyUrl);
-                const data = await res.json();
-                htmlContent = data.contents;
-            } catch (e) {
-                console.warn("Proxy falhou, passando URL pura", e);
-                htmlContent = `URL Escaneada: ${url}`;
-            }
-
-            const ai = getGeminiClient();
-            
-            const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e ou SAT).
-Abaixo está o conteúdo extraído da página web da nota fiscal escaneada via QR Code.
-Analise o conteúdo (pode ser HTML bagunçado ou dados brutos) e extraia TODOS os produtos listados.
-Para cada produto, retorne:
-- nome_original (exatamente como aparece)
-- nome_padronizado (nome simplificado e legível para a despensa, ex: "Arroz", "Leite Integral")
-- quantidade (o número/quantidade comprada, extraia se houver, senão retorne 1)
-- unidade (a unidade de medida, ex: UN, KG, LT. Se não identificar, use UN)
-- categoria (uma destas: Grãos/Massas, Bebidas, Laticínios, Limpeza, Hortifruti, Carnes, Higiene, Outros)
-
-Retorne APENAS um JSON válido no formato:
-{
-  "produtos": [
-    {
-      "nome_original": "...",
-      "nome_padronizado": "...",
-      "quantidade": "1",
-      "unidade": "UN",
-      "categoria": "..."
-    }
-  ]
-}
-Caso não encontre produtos na imagem/texto, retorne:
-{
-  "produtos": []
-}
-
-Conteúdo:
-${htmlContent.substring(0, 30000)}`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-lite',
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json"
-                }
-            });
-
-            if (response.text) {
-                const data = JSON.parse(response.text.trim());
-                const extractedProducts: NFCeProduct[] = data.produtos || [];
-                
-                if (extractedProducts.length > 0) {
-                    const productsWithChecked = extractedProducts.map(p => ({
-                        ...p,
-                        checked: true
-                    }));
-                    setExtractedProducts(productsWithChecked);
-                    setReviewNFCeModalOpen(true);
-                } else {
-                    alert("Nenhum produto foi detectado na nota fiscal deste QR Code.");
-                }
-            }
-        } catch (error) {
-            console.error("Erro no processamento da nota fiscal:", error);
-            alert("Não foi possível processar a nota fiscal a partir deste link. Tente tirar uma foto da nota (câmera) em vez disso.");
-        } finally {
-            setIsFetchingScannedProduct(false);
-        }
+        setScannerOpen(false);
+        setNfceRedirectUrl(url);
     };
 
     const handleScanSuccess = async (rawCode: string) => {
