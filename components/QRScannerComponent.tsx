@@ -200,6 +200,14 @@ const QRScannerComponent: React.FC<QRScannerComponentProps> = ({ onScanSuccess, 
                         </div>
                     </div>
                 )}
+                
+                {/* Subtle targeting square (opcional, pode ser removido, mas ajuda a guiar o usuário levemente sem ser poluído) */}
+                {!detectedCode && !error && (
+                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
+                        <div className="w-64 h-64 border-[3px] border-white/50 rounded-[2rem] shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
+                        <p className="mt-8 text-white/80 font-bold tracking-widest uppercase text-xs">Aponte para o QR Code</p>
+                    </div>
+                )}
 
                 {/* Overlay de Erro */}
                 {error && (
