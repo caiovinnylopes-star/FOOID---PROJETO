@@ -1200,6 +1200,44 @@ Não dê explicações ou textos fora do JSON.`;
                 {mainContent}
             </main>
 
+            {nfceRedirectUrl && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className={`${darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white'} border rounded-3xl p-6 shadow-2xl max-w-sm w-full animate-scale-in flex flex-col gap-4 text-center`}>
+                        <div className="w-16 h-16 bg-orange-500/10 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                        </div>
+                        <h3 className={`text-xl font-black ${highContrast ? 'text-yellow-400' : (darkMode ? 'text-white' : 'text-gray-900')}`}>
+                            Site da Nota Fiscal
+                        </h3>
+                        <p className={`text-sm leading-relaxed ${highContrast ? 'text-yellow-200' : (darkMode ? 'text-gray-400' : 'text-gray-600')}`}>
+                            Devido à proteção de segurança da Secretaria da Fazenda (Sefaz), não podemos ler o QR Code invisivelmente.
+                            <br/><br/>
+                            Nós vamos abrir o site oficial da nota para você. Por favor, confirme que não é um robô, <b>tire um Print (Captura de Tela)</b> da lista de produtos e em seguida use a opção <b>"Importar Foto da Galeria"</b> no app!
+                        </p>
+                        
+                        <div className="flex flex-col gap-3 mt-4">
+                            <button 
+                                onClick={() => {
+                                    window.open(nfceRedirectUrl, '_blank');
+                                    setNfceRedirectUrl(null);
+                                }}
+                                className="bg-orange-500 text-black font-bold py-3.5 px-6 rounded-xl hover:bg-orange-400 active:scale-95 transition-all shadow-lg"
+                            >
+                                Abrir Site da Nota
+                            </button>
+                            <button 
+                                onClick={() => setNfceRedirectUrl(null)}
+                                className={`font-bold py-3 px-6 rounded-xl transition-all ${darkMode ? 'text-gray-400 hover:bg-white/5' : 'text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {isScannerOpen && (
                 scannerMode === 'barcode' ? (
                     <ScannerComponent mode={scannerMode} onScanSuccess={handleScanSuccess} onClose={() => setScannerOpen(false)} />
