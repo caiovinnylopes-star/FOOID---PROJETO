@@ -857,6 +857,84 @@ const App: React.FC = () => {
         } catch(e) { console.warn("Firestore clear history failed, mantido localmente:", e); }
     };
 
+    const handleNFCeScan = async (url: string) => {
+        setIsFetchingScannedProduct(true);
+        try {
+            // Fetch HTML via proxy
+            let htmlContent = "";
+            try {
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+                const res = await fetch(proxyUrl);
+                const data = await res.json();
+                htmlContent = data.contents;
+            } catch (e) {
+                console.warn("Proxy falhou, passando URL pura", e);
+                htmlContent = `URL Escaneada: ${url}`;
+            }
+
+            const ai = getGeminiClient();
+            
+            const prompt = `Você é um sistema especialista em extração de dados de notas fiscais brasileiras (NFC-e ou SAT).
+Abaixo está o conteúdo extraído da página web da nota fiscal escaneada via QR Code.
+Analise o conteúdo (pode ser HTML bagunçado ou dados brutos) e extraia TODOS os produtos listados.
+Para cada produto, retorne:
+- nome_original (exatamente como aparece)
+- nome_padronizado (nome simplificado e legível para a despensa, ex: "Arroz", "Leite Integral")
+- quantidade (o número/quantidade comprada, extraia se houver, senão retorne 1)
+- unidade (a unidade de medida, ex: UN, KG, LT. Se não identificar, use UN)
+- categoria (uma destas: Grãos/Massas, Bebidas, Laticínios, Limpeza, Hortifruti, Carnes, Higiene, Outros)
+
+Retorne APENAS um JSON válido no formato:
+{
+  "produtos": [
+    {
+      "nome_original": "...",
+      "nome_padronizado": "...",
+      "quantidade": "1",
+      "unidade": "UN",
+      "categoria": "..."
+    }
+  ]
+}
+Caso não encontre produtos na imagem/texto, retorne:
+{
+  "produtos": []
+}
+
+Conteúdo:
+${htmlContent.substring(0, 30000)}`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-lite',
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json"
+                }
+            });
+
+            if (response.text) {
+                const data = JSON.parse(response.text.trim());
+                const extractedProducts: NFCeProduct[] = data.produtos || [];
+                
+                if (extractedProducts.length > 0) {
+                    const productsWithChecked = extractedProducts.map(p => ({
+                        ...p,
+                        checked: true
+                    }));
+                    setExtractedProducts(productsWithChecked);
+                    setReviewNFCeModalOpen(true);
+                } else {
+                    alert("Nenhum produto foi detectado na nota fiscal deste QR Code.");
+                }
+            }
+        } catch (error) {
+            console.error("Erro no processamento da nota fiscal:", error);
+            alert("Não foi possível processar a nota fiscal a partir deste link. Tente tirar uma foto da nota (câmera) em vez disso.");
+        } finally {
+            setIsFetchingScannedProduct(false);
+        }
+    };
+
     const handleScanSuccess = async (rawCode: string) => {
         setScannerOpen(false);
 
@@ -2791,7 +2869,7 @@ const PantryScreen: FC<{products: Product[], onNavigate: (s: Screen) => void, on
     </ScreenWrapper>
 );
 
-const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode') => void, onPhotoSelected: (file: File) => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, onPhotoSelected, scannedHistory, onClearHistory, darkMode, highContrast }) => {
+const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: (mode: 'barcode' | 'nfce') => void, onPhotoSelected: (file: File) => void, scannedHistory: ScannedItem[], onClearHistory: () => void, darkMode?: boolean, highContrast?: boolean}> = ({ onNavigate, onOpenScanner, onPhotoSelected, scannedHistory, onClearHistory, darkMode, highContrast }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const galleryInputRef = useRef<HTMLInputElement>(null);
     return (
@@ -2821,6 +2899,14 @@ const ScannerLandingScreen: FC<{onNavigate: (s: Screen) => void, onOpenScanner: 
             }} 
         />
         <div className="p-4 space-y-4">
+             <button onClick={() => onOpenScanner('nfce')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-orange-900/30 text-orange-400 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]' : 'bg-orange-50 text-orange-700 border border-orange-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 13.5h.008v.008H16.5v-.008zM19.5 16.5h.008v.008H19.5v-.008zM16.5 19.5h.008v.008H16.5v-.008zM19.5 19.5h.008v.008H19.5v-.008z" />
+                 </svg>
+                 Escanear QR Code da Nota
+             </button>
+             
              <button onClick={() => onOpenScanner('barcode')} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700')} font-bold rounded-lg shadow-sm flex items-center gap-3`}><BarcodeIcon className="w-6 h-6"/> Ler Código de Barras</button>
              
              <button onClick={() => fileInputRef.current?.click()} className={`w-full text-left p-4 ${highContrast ? 'bg-black border-2 border-yellow-400 text-yellow-400' : (darkMode ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')} font-bold rounded-lg shadow-sm flex items-center gap-3`}>
