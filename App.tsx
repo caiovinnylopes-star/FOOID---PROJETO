@@ -2935,7 +2935,7 @@ Retorne obrigatoriamente um JSON que seja uma lista (array) contendo exatamente 
     "ingredients": ["ingrediente 1", "ingrediente 2", ...],
     "instructions": ["Passo 1 do preparo", "Passo 2 do preparo", ...],
     "category": "quick" ou "healthy" ou "all",
-    "imagePrompt": "A highly detailed English prompt for an AI image generator to create a realistic photo of this dish (e.g. 'A delicious plate of <name>, professional food photography, cinematic lighting, 4k')"
+    "imagePrompt": "Short English prompt for an AI image generator to create a photo of this dish (max 80 chars, only letters and spaces)"
   }
 ]
 
@@ -2965,9 +2965,9 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
 
                 const newRecipes = await Promise.all(newRecipesRaw.map(async (r: any, index: number) => {
                     // Generate AI Image for the recipe using the precise prompt from Gemini
-                    const basePrompt = r.imagePrompt || `${r.title} food photography delicious high resolution`;
-                    const imagePrompt = encodeURIComponent(basePrompt);
-                    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=1024&height=576&nologo=true`;
+                    const basePrompt = r.imagePrompt || `${r.title} food`;
+                    const imagePrompt = encodeURIComponent(basePrompt.replace(/[^a-zA-Z0-9 ]/g, ""));
+                    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=450&nologo=true`;
                     
                     return {
                         id: Date.now() + index + Math.floor(Math.random() * 1000),
@@ -3009,51 +3009,49 @@ IMPORTANTE: Retorne APENAS o JSON puro, sem explicações extras e sem blocos de
                     {isGenerating ? 'O Chef está pensando...' : 'Sugerir com meus Ingredientes'}
                 </button>
             </div>
-            <div className="flex gap-2 px-4 pb-4 overflow-x-auto scrollbar-hide"><button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'all' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Todas</button><button onClick={() => setFilter('quick')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'quick' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Rápidas</button><button onClick={() => setFilter('healthy')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'healthy' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Saudáveis</button></div>
-            <div className="flex-grow overflow-y-auto p-4 pt-0">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pb-6">
+            <div className="flex gap-2 px-4 py-3 mt-1 overflow-x-auto scrollbar-hide"><button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'all' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Todas</button><button onClick={() => setFilter('quick')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'quick' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Rápidas</button><button onClick={() => setFilter('healthy')} className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${filter === 'healthy' ? (highContrast ? 'bg-yellow-400 text-black' : 'bg-red-500 text-white') : (highContrast ? 'border border-yellow-400 text-yellow-400' : (darkMode ? 'bg-zinc-800 text-gray-300' : 'bg-gray-200 text-gray-600'))}`}>Saudáveis</button></div>
+            <div className="flex-grow overflow-y-auto px-4 pb-6 pt-2">
+                <div className="flex flex-col gap-6">
                     {filteredRecipes.map(recipe => (
                         <div 
                             key={recipe.id} 
                             onClick={() => setSelectedRecipe(recipe)} 
-                            className={`rounded-3xl overflow-hidden shadow-md cursor-pointer transform transition-all duration-300 hover:scale-[1.02] hover:shadow-xl flex flex-col h-full border w-full max-w-sm mx-auto sm:max-w-none ${
+                            className={`rounded-3xl overflow-hidden shadow-sm cursor-pointer transform transition-all duration-300 active:scale-[0.98] flex flex-col border ${
                                 highContrast 
                                     ? 'bg-black border-2 border-yellow-400 text-yellow-400' 
                                     : (darkMode ? 'bg-zinc-800 border-zinc-700/50' : 'bg-white border-gray-100')
                             }`}
                         >
-                            {/* Card Image Area (Aspect 16:9) */}
-                            <div className="w-full aspect-[16/9] relative overflow-hidden bg-zinc-800">
+                            {/* Card Image Area (Fixed height) */}
+                            <div className="w-full h-48 relative overflow-hidden bg-zinc-200 dark:bg-zinc-800">
                                  <img 
                                      src={recipe.image} 
                                      alt={recipe.title} 
-                                     className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                                     className="w-full h-full object-cover transition-transform duration-500"
                                      onError={(e) => {
                                          // High quality backup photo if pollinations image fails to load
-                                         e.currentTarget.src = 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=800&auto=format&fit=crop&q=60';
+                                         e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60';
                                      }}
                                  />
                                  {/* Difficulty and Prep time badge */}
-                                 <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-xl text-[10px] font-black text-white flex gap-2 tracking-wider uppercase">
+                                 <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl text-xs font-black text-white flex gap-2 tracking-wide uppercase shadow-lg">
                                      <span>⏱ {recipe.prepTime}</span>
                                      <span>🔥 {recipe.difficulty}</span>
                                  </div>
                             </div>
                             
                             {/* Card Details Area */}
-                            <div className="p-4 flex flex-col justify-between flex-grow">
-                                 <div>
-                                     <h3 className={`font-black text-base leading-snug mb-1.5 ${
-                                         highContrast ? 'text-yellow-400' : (darkMode ? 'text-white' : 'text-gray-900')
-                                     }`}>
-                                         {recipe.title}
-                                     </h3>
-                                     <p className={`text-xs line-clamp-2 leading-relaxed ${
-                                         highContrast ? 'text-yellow-200' : (darkMode ? 'text-zinc-400' : 'text-zinc-500')
-                                     }`}>
-                                         {recipe.subtitle}
-                                     </p>
-                                 </div>
+                            <div className="p-5 flex flex-col gap-2">
+                                 <h3 className={`font-black text-lg line-clamp-2 leading-snug ${
+                                     highContrast ? 'text-yellow-400' : (darkMode ? 'text-white' : 'text-gray-900')
+                                 }`}>
+                                     {recipe.title}
+                                 </h3>
+                                 <p className={`text-sm line-clamp-2 leading-relaxed ${
+                                     highContrast ? 'text-yellow-200' : (darkMode ? 'text-zinc-400' : 'text-zinc-500')
+                                 }`}>
+                                     {recipe.subtitle}
+                                 </p>
                             </div>
                         </div>
                     ))}
