@@ -1034,15 +1034,12 @@ Não dê explicações ou textos fora do JSON.`;
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: [
-                    {
-                        inlineData: {
-                            data: base64Data,
-                            mimeType: file.type
-                        }
-                    },
-                    prompt
-                ],
+                contents: {
+                    parts: [
+                        { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } },
+                        { text: prompt }
+                    ]
+                },
                 config: {
                     responseMimeType: "application/json"
                 }
